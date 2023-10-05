@@ -1,0 +1,14 @@
+[package]
+name = "noaa-data-pipeline"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.75"
+futures-util = "0.3.28"
+parquet = "47.0.0"
+quick-xml = "0.30.0"
+reqwest = {version = "0.11.22", features=["stream"]}
+tokio = { version="1.32.0", features = ["macros", "rt-multi-thread"] }

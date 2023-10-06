@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'noaa-data-pipeline'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=noaa-data-pipeline",
+                    "--package=noaa-data-pipeline"
+                ],
+                "filter": {
+                    "name": "noaa-data-pipeline",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'noaa-data-pipeline'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=noaa-data-pipeline",
+                    "--package=noaa-data-pipeline"
+                ],
+                "filter": {
+                    "name": "noaa-data-pipeline",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

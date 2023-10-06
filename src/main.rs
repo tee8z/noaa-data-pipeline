@@ -1,78 +1,124 @@
-use anyhow::anyhow;
-use futures_util::{io::BufReader, StreamExt, TryStreamExt};
+use anyhow::{anyhow, Error};
 use parquet;
-use quick_xml::{events::Event, Reader};
-use reqwest::{self, Error, Response};
-use std::{future::Future, io::Bytes, vec};
+use parquet::data_type::AsBytes;
+use reqwest::{self, Client};
+use std::{fs::File, io::Write, vec};
 use tokio;
+use xml::reader::XmlEvent;
+use xml::EventReader;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    let path = r#"./stations.xml"#;
+
+    download_file(path).await?;
+    let stations = parse_xml_data(path).await;
+    let cleaned: Vec<&Station> = stations
+        .iter()
+        .filter(|station| station.station_name.to_lowercase().contains("airport"))
+        .collect();
+    let forecast = get_forecast(cleaned).await;
+    let observation = get_observations(cleaned).await;
+    write_parquet_files(stations, forecast, observation);
+    send_parquet_files();
+    Ok(())
+}
+
+async fn download_file(path: &str) -> Result<(), anyhow::Error> {
     let url = "https://w1.weather.gov/xml/current_obs/index.xml";
-    let client = reqwest::Client::new();
+    let client = Client::builder().user_agent("dataFetcher/1.0").build()?;
     let response = client.get(url).send().await?;
     if !response.status().is_success() {
         return Err(anyhow!("status: {}", response.status()));
     }
-
-    let stations = parse_xml_data(response);
-
-    // write_parquet_file(stations);
+    let mut output_file = File::create(path)?;
+    output_file
+        .write_all(&response.bytes().await.unwrap())
+        .unwrap();
+    output_file.flush()?;
     Ok(())
 }
 
-async fn parse_xml_data(response: Response) -> Vec<Station> {
-    let stream = response.bytes_stream();
-    let mut reader = BufReader::new(stream);
-    let mut xml_reader = Reader::from_reader(&reader);
-    // Loop over the Reader and read each event.
-    loop {
-        let event = xml_reader.read_event().unwrap();
-
-        // Process the event as needed.
-        match event {
-            Event::Start(element) => {
-                // The start of a new element.
-                // ...
-            }
-            Event::Text(text) => {
-                // The text content of an element.
-                // ...
-            }
-            Event::End(element) => {
-                // The end of an element.
-                // ...
-            }
-            Event::Eof => {
-                // The end of the stream.
-                break;
-            }
-            _ => {
-                // Other types of events, such as comments and processing instructions.
-                // ...
-            }
-        }
-    }
-    /* let document = parser.parse(xml_data.as_bytes()).unwrap();
-
-        let stations = document
-            .root()
-            .children()
-            .filter(|node| node.tag() == "station")
-            .map(|node| {
-                Station {
-                    station_id: node.attr("id").unwrap().to_string(),
-                    state: node.attr("state").unwrap().to_string(),
-                    station_name: node.attr("name").unwrap().to_string(),
-                    latitude: node.attr("latitude").unwrap().parse::<f64>().unwrap(),
-                    longitude: node.attr("longitude").unwrap().parse::<f64>().unwrap(),
-                }
-            })
-            .collect();
-    */
-    vec![]
+#[derive(Default)]
+struct Station {
+    pub station_id: String,
+    pub state: String,
+    pub station_name: String,
+    pub latitude: f64,
+    pub longitude: f64,
 }
 
+async fn parse_xml_data<'a>(file_path: &str) -> Vec<Station> {
+    let file = File::open(file_path).unwrap();
+    // Deserialize the XML into a Vec<Station> where each Station corresponds to a <station> element
+    let mut stations = vec![];
+    let parser = EventReader::new(file);
+    let mut current_element = String::from("");
+    let mut current_station: Option<Station> = None;
+    for event in parser {
+        match event {
+            Ok(XmlEvent::StartElement { name, .. }) => match name.local_name.as_str() {
+                "station" => {
+                    current_station = Some(Station {
+                        ..Default::default()
+                    })
+                }
+                "station_id" | "longitude" | "latitude" | "station_name" | "state" => {
+                    current_element = name.local_name.to_string();
+                    println!("current_element {}", current_element)
+                }
+                &_ => {
+                    current_element = String::from("");
+                }
+            },
+            Ok(XmlEvent::Characters(val)) => {
+                println!("val {}", val);
+
+                if let Some(ref mut station) = current_station.as_mut() {
+                    match current_element.as_str() {
+                        "station_id" => station.station_id = val,
+                        "longitude" => station.longitude = val.parse::<f64>().unwrap(),
+                        "latitude" => station.latitude = val.parse::<f64>().unwrap(),
+                        "station_name" => station.station_name = val,
+                        "state" => station.state = val,
+                        &_ => {}
+                    }
+                }
+            }
+            Ok(XmlEvent::EndElement { name }) => match name.local_name.as_str() {
+                "station" => {
+                    if let Some(station) = current_station.as_ref() {
+                        stations.push(Station {
+                            station_id: station.station_id.to_string(),
+                            state: station.state.to_string(),
+                            station_name: station.station_name.to_string(),
+                            latitude: station.latitude,
+                            longitude: station.longitude,
+                        })
+                    }
+                }
+                _ => (),
+            },
+            Err(e) => {
+                eprintln!("Error: {e}");
+                break;
+            }
+            _ => {}
+        }
+    }
+    stations
+}
+
+
+async fn get_forecast(aiport_stations: Vec<&Station>) -> Result<(), Error> {
+    let url = "https://w1.weather.gov/xml/current_obs/index.xml";
+    let client = Client::builder().user_agent("dataFetcher/1.0").build()?;
+    let response = client.get(url).send().await?;
+    if !response.status().is_success() {
+        return Err(anyhow!("status: {}", response.status()));
+    }
+    Ok(())
+}
 /*
 fn write_parquet_file(stations: Vec<Station>) {
     let writer = ParquetWriter::new("weather_stations.parquet").unwrap();
@@ -98,10 +144,3 @@ fn write_parquet_file(stations: Vec<Station>) {
     writer.close().unwrap();
 }*/
 
-struct Station {
-    station_id: String,
-    state: String,
-    station_name: String,
-    latitude: f64,
-    longitude: f64,
-}

@@ -1,26 +1,28 @@
 use anyhow::{anyhow, Error};
-use parquet;
-use parquet::data_type::AsBytes;
 use reqwest::{self, Client};
+use slog::{error, Logger};
 use std::{fs::File, io::Write, vec};
-use tokio;
 use xml::reader::XmlEvent;
 use xml::EventReader;
 
-#[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+//TODO: return path to parquet file
+pub async fn load_data(logger: Logger) -> Result<(), Error> {
     let path = r#"./stations.xml"#;
 
-    download_file(path).await?;
-    let stations = parse_xml_data(path).await;
+    match download_file(path).await {
+        Ok(_) => (),
+        Err(e) => error!(logger.clone(), "error downloading station file: {}", e),
+    }
+    let stations = parse_xml_data(logger.clone(), path).await;
     let cleaned: Vec<&Station> = stations
         .iter()
         .filter(|station| station.station_name.to_lowercase().contains("airport"))
         .collect();
-    let forecast = get_forecast(cleaned).await;
-    let observation = get_observations(cleaned).await;
-    write_parquet_files(stations, forecast, observation);
-    send_parquet_files();
+    let _forecast = match get_forecast(cleaned).await {
+        Ok(f) => f,
+        Err(e) => error!(logger, "error getting forecaset data: {}", e),
+    };
+    // let observation = get_observations(cleaned).await;
     Ok(())
 }
 
@@ -48,7 +50,7 @@ struct Station {
     pub longitude: f64,
 }
 
-async fn parse_xml_data<'a>(file_path: &str) -> Vec<Station> {
+async fn parse_xml_data<'a>(logger: Logger, file_path: &str) -> Vec<Station> {
     let file = File::open(file_path).unwrap();
     // Deserialize the XML into a Vec<Station> where each Station corresponds to a <station> element
     let mut stations = vec![];
@@ -65,15 +67,12 @@ async fn parse_xml_data<'a>(file_path: &str) -> Vec<Station> {
                 }
                 "station_id" | "longitude" | "latitude" | "station_name" | "state" => {
                     current_element = name.local_name.to_string();
-                    println!("current_element {}", current_element)
                 }
                 &_ => {
                     current_element = String::from("");
                 }
             },
             Ok(XmlEvent::Characters(val)) => {
-                println!("val {}", val);
-
                 if let Some(ref mut station) = current_station.as_mut() {
                     match current_element.as_str() {
                         "station_id" => station.station_id = val,
@@ -100,7 +99,7 @@ async fn parse_xml_data<'a>(file_path: &str) -> Vec<Station> {
                 _ => (),
             },
             Err(e) => {
-                eprintln!("Error: {e}");
+                error!(logger, "error parsing station xml file: {}", e);
                 break;
             }
             _ => {}
@@ -109,8 +108,7 @@ async fn parse_xml_data<'a>(file_path: &str) -> Vec<Station> {
     stations
 }
 
-
-async fn get_forecast(aiport_stations: Vec<&Station>) -> Result<(), Error> {
+async fn get_forecast(_aiport_stations: Vec<&Station>) -> Result<(), Error> {
     let url = "https://w1.weather.gov/xml/current_obs/index.xml";
     let client = Client::builder().user_agent("dataFetcher/1.0").build()?;
     let response = client.get(url).send().await?;
@@ -119,28 +117,3 @@ async fn get_forecast(aiport_stations: Vec<&Station>) -> Result<(), Error> {
     }
     Ok(())
 }
-/*
-fn write_parquet_file(stations: Vec<Station>) {
-    let writer = ParquetWriter::new("weather_stations.parquet").unwrap();
-
-    let schema = writer
-        .schema_builder()
-        .column("station_id", Encoding::Plain)
-        .column("state", Encoding::Plain)
-        .column("station_name", Encoding::Plain)
-        .column("latitude", Encoding::Plain)
-        .column("longitude", Encoding::Plain)
-        .build()
-        .unwrap();
-
-    writer.write_schema(&schema).unwrap();
-
-    for station in stations {
-        writer.write_row(&station).unwrap();
-    }
-
-    writer.flush().unwrap();
-
-    writer.close().unwrap();
-}*/
-

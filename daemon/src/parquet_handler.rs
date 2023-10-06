@@ -1,25 +1,58 @@
-/*
-fn write_parquet_file(stations: Vec<Station>) {
-    let writer = ParquetWriter::new("weather_stations.parquet").unwrap();
+use std::sync::Arc;
 
-    let schema = writer
-        .schema_builder()
-        .column("station_id", Encoding::Plain)
-        .column("state", Encoding::Plain)
-        .column("station_name", Encoding::Plain)
-        .column("latitude", Encoding::Plain)
-        .column("longitude", Encoding::Plain)
+use parquet::{
+    basic::{ConvertedType, Repetition, Type as PhysicalType},
+    schema::types::Type,
+};
+
+fn create_mapping_schema() -> Type {
+    let zone_id = Type::primitive_type_builder("zone_id", PhysicalType::BYTE_ARRAY)
+        .with_converted_type(ConvertedType::UTF8)
+        .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
 
-    writer.write_schema(&schema).unwrap();
+    let forecast_office_id =
+        Type::primitive_type_builder("forecast_office_id", PhysicalType::BYTE_ARRAY)
+            .with_converted_type(ConvertedType::UTF8)
+            .with_repetition(Repetition::OPTIONAL)
+            .build()
+            .unwrap();
 
-    for station in stations {
-        writer.write_row(&station).unwrap();
-    }
+    let observation_station_id =
+        Type::primitive_type_builder("observation_station_id", PhysicalType::BYTE_ARRAY)
+            .with_converted_type(ConvertedType::UTF8)
+            .with_repetition(Repetition::OPTIONAL)
+            .build()
+            .unwrap();
 
-    writer.flush().unwrap();
+    let observation_latitude =
+        Type::primitive_type_builder("observation_latitude", PhysicalType::INT64)
+            .with_converted_type(ConvertedType::UTF8)
+            .with_repetition(Repetition::OPTIONAL)
+            .build()
+            .unwrap();
 
-    writer.close().unwrap();
-}*/
+    let observation_longitude =
+        Type::primitive_type_builder("observation_latitude", PhysicalType::INT64)
+            .with_converted_type(ConvertedType::UTF8)
+            .with_repetition(Repetition::OPTIONAL)
+            .build()
+            .unwrap();
 
+    let forecast_values = Type::group_type_builder("forecast_values");
+
+    let observation_values = Type::group_type_builder("observation_values");
+
+    let schema = Type::group_type_builder("mapping")
+        .with_fields(vec![
+            Arc::new(zone_id),
+            Arc::new(forecast_office_id),
+            Arc::new(observation_station_id),
+            Arc::new(observation_latitude),
+            Arc::new(observation_longitude),
+        ])
+        .build()
+        .unwrap();
+    schema
+}

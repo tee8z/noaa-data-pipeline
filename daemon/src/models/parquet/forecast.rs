@@ -30,18 +30,19 @@ pub fn create_forecast_schema() -> Type {
 
     let observation_latitude =
         Type::primitive_type_builder("observation_latitude", PhysicalType::INT64)
-            .with_converted_type(ConvertedType::UTF8)
+            .with_converted_type(ConvertedType::INT_64)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
 
     let observation_longitude =
         Type::primitive_type_builder("observation_longitude", PhysicalType::INT64)
-            .with_converted_type(ConvertedType::UTF8)
+            .with_converted_type(ConvertedType::INT_64)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
-    let update = Type::primitive_type_builder("updated", PhysicalType::BYTE_ARRAY)
+
+    let updated = Type::primitive_type_builder("updated", PhysicalType::BYTE_ARRAY)
         .with_converted_type(ConvertedType::UTF8)
         .with_repetition(Repetition::OPTIONAL)
         .build()
@@ -70,132 +71,82 @@ pub fn create_forecast_schema() -> Type {
         .build()
         .unwrap();
 
-    let wind_speed_unit_code = Type::primitive_type_builder("unit_code", PhysicalType::BYTE_ARRAY)
-        .with_converted_type(ConvertedType::UTF8)
-        .with_repetition(Repetition::OPTIONAL)
-        .build()
-        .unwrap();
-
-    let wind_speed_val = Type::primitive_type_builder("value", PhysicalType::INT64)
-        .with_repetition(Repetition::OPTIONAL)
-        .build()
-        .unwrap();
-
-    let wind_speed = Type::group_type_builder("wind_speed")
-        .with_fields(vec![
-            Arc::new(wind_speed_unit_code),
-            Arc::new(wind_speed_val),
-        ])
-        .build()
-        .unwrap();
-
-    let temp_unit_code = Type::primitive_type_builder("unit_code", PhysicalType::BYTE_ARRAY)
-        .with_converted_type(ConvertedType::UTF8)
-        .with_repetition(Repetition::OPTIONAL)
-        .build()
-        .unwrap();
-
-    let temp_val = Type::primitive_type_builder("value", PhysicalType::INT64)
-        .with_repetition(Repetition::OPTIONAL)
-        .build()
-        .unwrap();
-
-    let temperature = Type::group_type_builder("temperature")
-        .with_fields(vec![Arc::new(temp_unit_code), Arc::new(temp_val)])
-        .build()
-        .unwrap();
-
-    let probability_of_precipitation_unit_code =
-        Type::primitive_type_builder("unit_code", PhysicalType::BYTE_ARRAY)
+    let wind_speed_unit_code =
+        Type::primitive_type_builder("wind_speed_unit_code", PhysicalType::BYTE_ARRAY)
             .with_converted_type(ConvertedType::UTF8)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
 
-    let probability_of_precipitation_val =
-        Type::primitive_type_builder("value", PhysicalType::FLOAT)
+    let wind_speed_value = Type::primitive_type_builder("wind_speed_value", PhysicalType::INT64)
+        .with_repetition(Repetition::OPTIONAL)
+        .build()
+        .unwrap();
+
+    let temperature_unit_code =
+        Type::primitive_type_builder("temperature_unit_code", PhysicalType::BYTE_ARRAY)
+            .with_converted_type(ConvertedType::UTF8)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
 
-    let probability_of_precipitation = Type::group_type_builder("probability_of_precipitation")
-        .with_fields(vec![
-            Arc::new(probability_of_precipitation_unit_code),
-            Arc::new(probability_of_precipitation_val),
-        ])
-        .build()
-        .unwrap();
-
-    let dew_unit_code = Type::primitive_type_builder("unit_code", PhysicalType::BYTE_ARRAY)
-        .with_converted_type(ConvertedType::UTF8)
+    let temperature_value = Type::primitive_type_builder("temperature_value", PhysicalType::INT64)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
 
-    let dew_val = Type::primitive_type_builder("value", PhysicalType::FLOAT)
-        .with_repetition(Repetition::OPTIONAL)
-        .build()
-        .unwrap();
+    let probability_of_precipitation_unit_code = Type::primitive_type_builder(
+        "probability_of_precipitation_unit_code",
+        PhysicalType::BYTE_ARRAY,
+    )
+    .with_converted_type(ConvertedType::UTF8)
+    .with_repetition(Repetition::OPTIONAL)
+    .build()
+    .unwrap();
 
-    let dewpoint = Type::group_type_builder("dewpoint")
-        .with_fields(vec![Arc::new(dew_unit_code), Arc::new(dew_val)])
+    let probability_of_precipitation_value =
+        Type::primitive_type_builder("probability_of_precipitation_value", PhysicalType::INT64)
+            .with_repetition(Repetition::OPTIONAL)
+            .build()
+            .unwrap();
+
+    let dewpoint_unit_code =
+        Type::primitive_type_builder("dewpoint_unit_code", PhysicalType::BYTE_ARRAY)
+            .with_converted_type(ConvertedType::UTF8)
+            .with_repetition(Repetition::OPTIONAL)
+            .build()
+            .unwrap();
+
+    let dewpoint_value = Type::primitive_type_builder("dewpoint_value", PhysicalType::FLOAT)
+        .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
 
     let relative_humidity_unit_code =
-        Type::primitive_type_builder("unit_code", PhysicalType::BYTE_ARRAY)
+        Type::primitive_type_builder("relative_humidity_unit_code", PhysicalType::BYTE_ARRAY)
             .with_converted_type(ConvertedType::UTF8)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
 
-    let relative_humidity_val = Type::primitive_type_builder("value", PhysicalType::FLOAT)
-        .with_repetition(Repetition::OPTIONAL)
-        .build()
-        .unwrap();
-
-    let relative_humidity = Type::group_type_builder("precipitation_last_hour")
-        .with_fields(vec![
-            Arc::new(relative_humidity_unit_code),
-            Arc::new(relative_humidity_val),
-        ])
-        .build()
-        .unwrap();
+    let relative_humidity_value =
+        Type::primitive_type_builder("relative_humidity_value", PhysicalType::INT64)
+            .with_repetition(Repetition::OPTIONAL)
+            .build()
+            .unwrap();
 
     let wind_direction_unit_code =
-        Type::primitive_type_builder("unit_code", PhysicalType::BYTE_ARRAY)
+        Type::primitive_type_builder("wind_direction_unit_code", PhysicalType::BYTE_ARRAY)
             .with_converted_type(ConvertedType::UTF8)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
 
-    let wind_direction_val = Type::primitive_type_builder("value", PhysicalType::FLOAT)
-        .with_repetition(Repetition::OPTIONAL)
-        .build()
-        .unwrap();
-
-    let wind_direction = Type::group_type_builder("wind_direction")
-        .with_fields(vec![
-            Arc::new(wind_direction_unit_code),
-            Arc::new(wind_direction_val),
-        ])
-        .build()
-        .unwrap();
-    let forecast_14_day = Type::group_type_builder("forecast_14_day")
-        .with_repetition(Repetition::REPEATED)
-        .with_fields(vec![
-            Arc::new(day),
-            Arc::new(start_time),
-            Arc::new(end_time),
-            Arc::new(wind_speed),
-            Arc::new(temperature),
-            Arc::new(probability_of_precipitation),
-            Arc::new(dewpoint),
-            Arc::new(relative_humidity),
-            Arc::new(wind_direction),
-        ])
-        .build()
-        .unwrap();
+    let wind_direction_value =
+        Type::primitive_type_builder("wind_direction_value", PhysicalType::FLOAT)
+            .with_repetition(Repetition::OPTIONAL)
+            .build()
+            .unwrap();
 
     let schema = Type::group_type_builder("forecast")
         .with_fields(vec![
@@ -204,26 +155,28 @@ pub fn create_forecast_schema() -> Type {
             Arc::new(observation_station_id),
             Arc::new(observation_latitude),
             Arc::new(observation_longitude),
-            Arc::new(update),
+            Arc::new(updated),
             Arc::new(generated_at),
-            Arc::new(forecast_14_day),
+            Arc::new(day),
+            Arc::new(start_time),
+            Arc::new(end_time),
+            Arc::new(wind_speed_unit_code),
+            Arc::new(wind_speed_value),
+            Arc::new(temperature_unit_code),
+            Arc::new(temperature_value),
+            Arc::new(probability_of_precipitation_unit_code),
+            Arc::new(probability_of_precipitation_value),
+            Arc::new(dewpoint_unit_code),
+            Arc::new(dewpoint_value),
+            Arc::new(relative_humidity_unit_code),
+            Arc::new(relative_humidity_value),
+            Arc::new(wind_direction_unit_code),
+            Arc::new(wind_direction_value),
         ])
         .build()
         .unwrap();
-    schema
-}
 
-#[derive(ParquetRecordWriter)]
-pub struct Forecast14Day {
-    pub day: i64,
-    pub start_time: String,
-    pub end_time: String,
-    pub wind_speed: Option<WindSpeed>,
-    pub temperature: Option<Temperature>,
-    pub probability_of_precipitation: Option<ProbabilityOfPrecipitation>,
-    pub dewpoint: Option<Dewpoint>,
-    pub relative_humidity: Option<RelativeHumidity>,
-    pub wind_direction: Option<WindDirection>,
+    schema
 }
 
 #[derive(ParquetRecordWriter)]
@@ -235,108 +188,85 @@ pub struct Forecast {
     pub observation_longitude: i64,
     pub updated: Option<String>,
     pub generated_at: Option<String>,
-    pub forecast_14_day: Vec<Forecast14Day>,
+    pub day: i64,
+    pub start_time: String,
+    pub end_time: String,
+    pub wind_speed_unit_code: Option<String>,
+    pub wind_speed_value: Option<i64>,
+    pub temperature_unit_code: Option<String>,
+    pub temperature_value: Option<i64>,
+    pub probability_of_precipitation_unit_code: Option<String>,
+    pub probability_of_precipitation_value: Option<i64>,
+    pub dewpoint_unit_code: Option<String>,
+    pub dewpoint_value: Option<f64>,
+    pub relative_humidity_unit_code: Option<String>,
+    pub relative_humidity_value: Option<i64>,
+    pub wind_direction_unit_code: Option<String>,
+    pub wind_direction_value: Option<f64>,
 }
 
-impl From<Mapping> for Forecast {
-    fn from(value: Mapping) -> Self {
-        let forecast = value
+impl From<&Mapping> for Vec<Forecast> {
+    fn from(value: &Mapping) -> Self {
+        let forecasts = value
             .forecast_values
             .periods
             .iter()
             .map(|val| {
-                let wind_speed = if let Some(speed) = val.wind_speed.clone() {
+                let wind_speed_unit_code: Option<String>;
+                let wind_speed_value: Option<i64>;
+                if let Some(speed) = val.wind_speed.clone() {
                     let items: Vec<&str> = speed.split(" ").collect();
-                    let val = items[0].to_string().parse::<i64>().unwrap();
-                    let unit = items[1].to_string();
-                    Some(WindSpeed {
-                        value: Some(val),
-                        unit_code: unit,
-                    })
+                    wind_speed_unit_code = Some(items[1].to_string());
+                    wind_speed_value = Some(items[0].to_string().parse::<i64>().unwrap());
                 } else {
-                    None
-                };
-                let temperature = Temperature {
-                    value: Some(val.temperature),
-                    unit_code: val.temperature_unit.clone(),
-                };
-                let wind_direction = if let Some(direction) = val.wind_direction.clone() {
-                    Some(WindDirection {
-                        unit_code: String::from("wmoUnit:degree_(angle)"),
-                        value: wind_direction_to_angle(&direction),
-                    })
+                    wind_speed_unit_code = None;
+                    wind_speed_value = None;
+                }
+
+                let wind_direction_unit_code: Option<String>;
+                let wind_direction_value: Option<f64>;
+                if let Some(direction) = val.wind_direction.clone() {
+                    wind_direction_unit_code = Some(String::from("wmoUnit:degree_(angle)"));
+                    wind_direction_value = wind_direction_to_angle(&direction);
                 } else {
-                    None
-                };
-                Forecast14Day {
+                    wind_direction_unit_code = None;
+                    wind_direction_value = None;
+                }
+
+                Forecast {
+                    zone_id: value.zone_id.clone(),
+                    forecast_office_id: value.forecast_office_id.clone(),
+                    observation_station_id: value.observation_station_id.clone(),
+                    observation_latitude: value.observation_latitude as i64,
+                    observation_longitude: value.observation_longitude as i64,
+                    updated: Some(value.forecast_values.updated.clone()),
+                    generated_at: Some(value.forecast_values.generated_at.clone()),
                     day: val.number,
                     start_time: val.start_time.clone(),
                     end_time: val.end_time.clone(),
-                    wind_speed: wind_speed,
-                    temperature: Some(temperature),
-                    probability_of_precipitation: Some(ProbabilityOfPrecipitation {
-                        unit_code: val.probability_of_precipitation.unit_code.clone(),
-                        value: val.probability_of_precipitation.value.clone(),
-                    }),
-                    dewpoint: Some(Dewpoint {
-                        unit_code: val.dewpoint.unit_code.clone(),
-                        value: val.dewpoint.value,
-                    }),
-                    relative_humidity: Some(RelativeHumidity {
-                        unit_code: val.relative_humidity.unit_code.clone(),
-                        value: val.relative_humidity.value,
-                    }),
-                    wind_direction: wind_direction,
+                    wind_speed_unit_code,
+                    wind_speed_value,
+                    temperature_unit_code: Some(val.temperature_unit.clone()),
+                    temperature_value: Some(val.temperature),
+                    probability_of_precipitation_unit_code: Some(
+                        val.probability_of_precipitation.unit_code.clone(),
+                    ),
+                    probability_of_precipitation_value: val
+                        .probability_of_precipitation
+                        .value
+                        .clone(),
+                    dewpoint_unit_code: Some(val.dewpoint.unit_code.clone()),
+                    dewpoint_value: val.dewpoint.value,
+                    relative_humidity_unit_code: Some(val.relative_humidity.unit_code.clone()),
+                    relative_humidity_value: val.relative_humidity.value,
+                    wind_direction_unit_code,
+                    wind_direction_value,
                 }
             })
             .collect();
-        Self {
-            zone_id: value.zone_id,
-            forecast_office_id: value.forecast_office_id,
-            observation_station_id: value.observation_station_id,
-            observation_latitude: value.observation_latitude as i64,
-            observation_longitude: value.observation_longitude as i64,
-            updated: Some(value.forecast_values.updated),
-            generated_at: Some(value.forecast_values.generated_at),
-            forecast_14_day: forecast,
-        }
+
+        forecasts
     }
-}
-
-#[derive(ParquetRecordWriter)]
-pub struct WindSpeed {
-    pub unit_code: String,
-    pub value: Option<i64>,
-}
-
-#[derive(ParquetRecordWriter)]
-pub struct ProbabilityOfPrecipitation {
-    pub unit_code: String,
-    pub value: Option<i64>,
-}
-
-#[derive(ParquetRecordWriter)]
-pub struct Temperature {
-    pub unit_code: String,
-    pub value: Option<i64>,
-}
-
-#[derive(ParquetRecordWriter)]
-pub struct Dewpoint {
-    pub unit_code: String,
-    pub value: Option<f64>,
-}
-
-#[derive(ParquetRecordWriter)]
-pub struct RelativeHumidity {
-    pub unit_code: String,
-    pub value: Option<i64>,
-}
-
-#[derive(ParquetRecordWriter)]
-pub struct WindDirection {
-    pub unit_code: String,
-    pub value: Option<f64>,
 }
 
 fn wind_direction_to_angle(direction: &str) -> Option<f64> {

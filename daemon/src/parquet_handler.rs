@@ -1,37 +1,59 @@
+use anyhow::Error;
+use parquet::{
+    file::{properties::WriterProperties, writer::SerializedFileWriter},
+    record::RecordWriter,
+};
 use std::{fs::File, sync::Arc};
 
-use parquet::{
-    basic::{ConvertedType, Repetition, Type as PhysicalType},
-    file::{properties::WriterProperties, writer::SerializedFileWriter},
-    schema::types::Type,
-};
+use crate::{create_observation_schema, models::parquet::Forecast, station, Mapping, Observation};
 
-use crate::{create_observation_schema, Mapping, Observation};
+pub fn save_observations(mappings: Vec<&Mapping>, file_name: String) -> String {
+    let full_name = format!("{}.parquet", file_name);
 
-fn save_observations(mappings: Vec<Mapping>) {
-    let file = File::create("my_structs.parquet")?;
+    let file = File::create(full_name.clone()).unwrap();
     let props = WriterProperties::builder().build();
     let mut writer =
-        SerializedFileWriter::new(file, Arc::new(create_observation_schema()), Arc::new(props))?;
+        SerializedFileWriter::new(file, Arc::new(create_observation_schema()), Arc::new(props))
+            .unwrap();
 
-    for item in mappings {
-        let observation: Observation = item.into();
-        writer.write(&observation.to_parquet_record())?;
-    }
+    let observations: Vec<Observation> = mappings.iter().map(|data| (*data).into()).collect();
 
-    writer.close()?;
+    let mut row_group = writer.next_row_group().unwrap();
+    observations
+        .as_slice()
+        .write_to_row_group(&mut row_group)
+        .unwrap();
+    row_group.close().unwrap();
+    writer.close().unwrap();
+    full_name
 }
 
-fn save_forecasts(mappings: Vec<Mapping>) {
-    let file = File::create("my_structs.parquet")?;
+pub fn save_forecasts(mappings: Vec<&Mapping>, file_name: String) -> String {
+    let full_name = format!("{}.parquet", file_name);
+    let file = File::create(full_name.clone()).unwrap();
+
+    let forecasts: Vec<Forecast> = mappings
+        .iter()
+        .flat_map(|data| <&station::Mapping as Into<Vec<Forecast>>>::into(*data))
+        .collect();
+
     let props = WriterProperties::builder().build();
     let mut writer =
-        SerializedFileWriter::new(file, Arc::new(create_observation_schema()), Arc::new(props))?;
+        SerializedFileWriter::new(file, Arc::new(create_observation_schema()), Arc::new(props))
+            .unwrap();
 
-    for item in mappings {
-        let forecast: Forecast = item.into();
-        writer.write(&forecast.to_parquet_record())?;
-    }
+    let mut row_group = writer.next_row_group().unwrap();
+    forecasts
+        .as_slice()
+        .write_to_row_group(&mut row_group)
+        .unwrap();
+    row_group.close().unwrap();
+    writer.close().unwrap();
+    full_name
+}
 
-    writer.close()?;
+
+// TODO: set up sending the two new parquet files generated to the api server
+pub fn send_parquet_files(_file_locations: (String, String)) -> Result<(), Error> {
+    Ok(())
 }

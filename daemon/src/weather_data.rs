@@ -3,6 +3,7 @@ use futures::future::join_all;
 use reqwest::{self, Client};
 use serde::de::DeserializeOwned;
 use slog::{error, Logger};
+use time::OffsetDateTime;
 use std::collections::HashMap;
 use std::iter::Peekable;
 use std::{fs::File, io::Write, vec};
@@ -14,10 +15,10 @@ use crate::models::{
     station::{Root, Station},
     zone::Root as ZoneRoot,
 };
-use crate::Mapping;
+use crate::{Mapping, parquet_handler::{save_observations, save_forecasts}};
 
 //TODO: return path to parquet file
-pub async fn load_data(logger: Logger) -> Result<(), Error> {
+pub async fn load_data(logger: Logger) -> Result<(String, String), Error> {
     let path = r#"./stations.xml"#;
 
     match download_file(path).await {
@@ -53,8 +54,11 @@ pub async fn load_data(logger: Logger) -> Result<(), Error> {
         Err(e) => Err(anyhow!("error getting forecast data for station: {}", e)),
     }?;
 
-    let parquet_file = save_results(all_station_data).await;
-    Ok(())
+    let parquet_files = match save_results(all_station_data).await {
+        Ok(f) => Ok(f),
+        Err(e) => Err(anyhow!("error saving parquet files for weather data: {}", e)),
+    }?;
+    Ok(parquet_files)
 }
 
 async fn download_file(path: &str) -> Result<(), anyhow::Error> {
@@ -282,8 +286,10 @@ async fn get_observation(
     Ok(mapping)
 }
 
+
+//TODO: fix function to add forecast data to mapping
 async fn get_forecast(
-    mut mapping: HashMap<String, Mapping>,
+    mapping: HashMap<String, Mapping>,
 ) -> Result<HashMap<String, Mapping>, Error> {
     let url = "https://w1.weather.gov/xml/current_obs/index.xml";
     let client = Client::builder().user_agent("dataFetcher/1.0").build()?;
@@ -294,29 +300,10 @@ async fn get_forecast(
     Ok(mapping)
 }
 
-
-async fn save_results(mapping: HashMap<String, Mapping>) -> Result<String, Error> {
-    Ok("path".to_string())
-}
-
-fn wind_direction_to_angle(direction: &str) -> Option<f64> {
-    match direction.to_uppercase().as_str() {
-        "N" => Some(0.0),
-        "NNE" => Some(22.5),
-        "NE" => Some(45.0),
-        "ENE" => Some(67.5),
-        "E" => Some(90.0),
-        "ESE" => Some(112.5),
-        "SE" => Some(135.0),
-        "SSE" => Some(157.5),
-        "S" => Some(180.0),
-        "SSW" => Some(202.5),
-        "SW" => Some(225.0),
-        "WSW" => Some(247.5),
-        "W" => Some(270.0),
-        "WNW" => Some(292.5),
-        "NW" => Some(315.0),
-        "NNW" => Some(337.5),
-        _ => None, // Invalid wind direction
-    }
+async fn save_results(mapping: HashMap<String, Mapping>) -> Result<(String, String), Error> {
+    let values: Vec<&Mapping> = mapping.values().collect();
+    let current_utc_time: OffsetDateTime = OffsetDateTime::now_utc();
+    let observations_parquet = save_observations(values.clone(), format!("{}_{}", "observations", current_utc_time));
+    let forecast_parquet = save_forecasts(values, format!("{}_{}", "forecasts", current_utc_time));
+    Ok((observations_parquet, forecast_parquet))
 }

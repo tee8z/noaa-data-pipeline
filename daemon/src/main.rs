@@ -1,5 +1,5 @@
 use clap::Parser;
-use daemon::load_data;
+use daemon::{load_data, send_parquet_files};
 use slog::{o, Drain, Level, Logger};
 use std::env;
 use tokio;
@@ -16,8 +16,10 @@ pub struct Cli {
 async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
     let logger = setup_logger(&cli);
-    let _data = load_data(logger).await.unwrap();
-    //send_parquet_files();
+
+    // TODO run these two items in a task that runs every 10 or 20 minutes
+    let file_locations = load_data(logger).await.unwrap();
+    send_parquet_files(file_locations)?;
     Ok(())
 }
 

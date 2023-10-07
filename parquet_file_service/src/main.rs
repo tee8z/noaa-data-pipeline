@@ -28,7 +28,9 @@ use tower_http::{
 async fn main() -> anyhow::Result<()> {
     let app = app();
     let listener = SocketAddr::from_str(&"0.0.0.0:9100").unwrap();
-    axum::Server::bind(&listener).serve(app.into_make_service()).await?;
+    axum::Server::bind(&listener)
+        .serve(app.into_make_service())
+        .await?;
     Ok(())
 }
 pub fn app() -> Router {

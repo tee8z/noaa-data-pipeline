@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{noaa::{forecast, observation}, self};
+use crate::models::{
+    noaa::{forecast, observation},
+};
 // combined results
 #[derive(Debug, Default, Clone)]
 pub struct Mapping {
@@ -12,13 +14,6 @@ pub struct Mapping {
     pub forecast_values: forecast::Properties,
     pub observation_values: observation::Properties,
 }
-
-impl From<models::parquet::Observation> for Mapping {
-    fn from(value: models::parquet::Observation) -> Self {
-        todo!()
-    }
-}
-
 
 // from xml file
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]

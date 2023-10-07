@@ -1,58 +1,37 @@
-use std::sync::Arc;
+use std::{fs::File, sync::Arc};
 
 use parquet::{
     basic::{ConvertedType, Repetition, Type as PhysicalType},
+    file::{properties::WriterProperties, writer::SerializedFileWriter},
     schema::types::Type,
 };
 
-fn create_mapping_schema() -> Type {
-    let zone_id = Type::primitive_type_builder("zone_id", PhysicalType::BYTE_ARRAY)
-        .with_converted_type(ConvertedType::UTF8)
-        .with_repetition(Repetition::OPTIONAL)
-        .build()
-        .unwrap();
+use crate::{create_observation_schema, Mapping, Observation};
 
-    let forecast_office_id =
-        Type::primitive_type_builder("forecast_office_id", PhysicalType::BYTE_ARRAY)
-            .with_converted_type(ConvertedType::UTF8)
-            .with_repetition(Repetition::OPTIONAL)
-            .build()
-            .unwrap();
+fn save_observations(mappings: Vec<Mapping>) {
+    let file = File::create("my_structs.parquet")?;
+    let props = WriterProperties::builder().build();
+    let mut writer =
+        SerializedFileWriter::new(file, Arc::new(create_observation_schema()), Arc::new(props))?;
 
-    let observation_station_id =
-        Type::primitive_type_builder("observation_station_id", PhysicalType::BYTE_ARRAY)
-            .with_converted_type(ConvertedType::UTF8)
-            .with_repetition(Repetition::OPTIONAL)
-            .build()
-            .unwrap();
+    for item in mappings {
+        let observation: Observation = item.into();
+        writer.write(&observation.to_parquet_record())?;
+    }
 
-    let observation_latitude =
-        Type::primitive_type_builder("observation_latitude", PhysicalType::INT64)
-            .with_converted_type(ConvertedType::UTF8)
-            .with_repetition(Repetition::OPTIONAL)
-            .build()
-            .unwrap();
+    writer.close()?;
+}
 
-    let observation_longitude =
-        Type::primitive_type_builder("observation_latitude", PhysicalType::INT64)
-            .with_converted_type(ConvertedType::UTF8)
-            .with_repetition(Repetition::OPTIONAL)
-            .build()
-            .unwrap();
+fn save_forecasts(mappings: Vec<Mapping>) {
+    let file = File::create("my_structs.parquet")?;
+    let props = WriterProperties::builder().build();
+    let mut writer =
+        SerializedFileWriter::new(file, Arc::new(create_observation_schema()), Arc::new(props))?;
 
-    let forecast_values = Type::group_type_builder("forecast_values");
+    for item in mappings {
+        let forecast: Forecast = item.into();
+        writer.write(&forecast.to_parquet_record())?;
+    }
 
-    let observation_values = Type::group_type_builder("observation_values");
-
-    let schema = Type::group_type_builder("mapping")
-        .with_fields(vec![
-            Arc::new(zone_id),
-            Arc::new(forecast_office_id),
-            Arc::new(observation_station_id),
-            Arc::new(observation_latitude),
-            Arc::new(observation_longitude),
-        ])
-        .build()
-        .unwrap();
-    schema
+    writer.close()?;
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{observation, forecast};
+use crate::models::{noaa::{forecast, observation}, self};
 // combined results
 #[derive(Debug, Default, Clone)]
 pub struct Mapping {
@@ -10,7 +10,13 @@ pub struct Mapping {
     pub observation_latitude: u64,
     pub observation_longitude: u64,
     pub forecast_values: forecast::Properties,
-    pub observation_values: observation::Properties
+    pub observation_values: observation::Properties,
+}
+
+impl From<models::parquet::Observation> for Mapping {
+    fn from(value: models::parquet::Observation) -> Self {
+        todo!()
+    }
 }
 
 
@@ -23,7 +29,6 @@ pub struct Station {
     pub latitude: f64,
     pub longitude: f64,
 }
-
 
 // stations detail
 // https://api.weather.gov/stations?id=KPVG%2CKCNB&limit=500

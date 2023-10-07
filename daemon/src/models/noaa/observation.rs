@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-
-
 // station observation
 // https://api.weather.gov/stations/KPVG/observations/latest?require_qc=false
 
@@ -159,14 +157,14 @@ pub struct Properties {
 #[serde(rename_all = "camelCase")]
 pub struct Elevation {
     pub unit_code: String,
-    pub value: i64,
+    pub value: Option<i64>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Temperature {
     pub unit_code: String,
-    pub value: i64,
+    pub value: Option<i64>,
     pub quality_control: String,
 }
 
@@ -174,7 +172,7 @@ pub struct Temperature {
 #[serde(rename_all = "camelCase")]
 pub struct Dewpoint {
     pub unit_code: String,
-    pub value: i64,
+    pub value: Option<i64>,
     pub quality_control: String,
 }
 
@@ -182,7 +180,7 @@ pub struct Dewpoint {
 #[serde(rename_all = "camelCase")]
 pub struct WindDirection {
     pub unit_code: String,
-    pub value: Value,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -190,7 +188,7 @@ pub struct WindDirection {
 #[serde(rename_all = "camelCase")]
 pub struct WindSpeed {
     pub unit_code: String,
-    pub value: f64,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -198,7 +196,7 @@ pub struct WindSpeed {
 #[serde(rename_all = "camelCase")]
 pub struct WindGust {
     pub unit_code: String,
-    pub value: Value,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -206,7 +204,7 @@ pub struct WindGust {
 #[serde(rename_all = "camelCase")]
 pub struct BarometricPressure {
     pub unit_code: String,
-    pub value: i64,
+    pub value: Option<i64>,
     pub quality_control: String,
 }
 
@@ -214,7 +212,7 @@ pub struct BarometricPressure {
 #[serde(rename_all = "camelCase")]
 pub struct SeaLevelPressure {
     pub unit_code: String,
-    pub value: Value,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -222,7 +220,7 @@ pub struct SeaLevelPressure {
 #[serde(rename_all = "camelCase")]
 pub struct Visibility {
     pub unit_code: String,
-    pub value: i64,
+    pub value: Option<i64>,
     pub quality_control: String,
 }
 
@@ -230,21 +228,21 @@ pub struct Visibility {
 #[serde(rename_all = "camelCase")]
 pub struct MaxTemperatureLast24Hours {
     pub unit_code: String,
-    pub value: Value,
+    pub value: Option<f64>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MinTemperatureLast24Hours {
     pub unit_code: String,
-    pub value: Value,
+    pub value: Option<f64>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrecipitationLastHour {
     pub unit_code: String,
-    pub value: Value,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -252,7 +250,7 @@ pub struct PrecipitationLastHour {
 #[serde(rename_all = "camelCase")]
 pub struct PrecipitationLast3Hours {
     pub unit_code: String,
-    pub value: Value,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -260,7 +258,7 @@ pub struct PrecipitationLast3Hours {
 #[serde(rename_all = "camelCase")]
 pub struct PrecipitationLast6Hours {
     pub unit_code: String,
-    pub value: Value,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -268,7 +266,7 @@ pub struct PrecipitationLast6Hours {
 #[serde(rename_all = "camelCase")]
 pub struct RelativeHumidity {
     pub unit_code: String,
-    pub value: f64,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -276,7 +274,7 @@ pub struct RelativeHumidity {
 #[serde(rename_all = "camelCase")]
 pub struct WindChill {
     pub unit_code: String,
-    pub value: Value,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -284,7 +282,7 @@ pub struct WindChill {
 #[serde(rename_all = "camelCase")]
 pub struct HeatIndex {
     pub unit_code: String,
-    pub value: f64,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -301,6 +299,3 @@ pub struct Base {
     pub unit_code: String,
     pub value: i64,
 }
-
-
-

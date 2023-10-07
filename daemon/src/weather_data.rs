@@ -6,12 +6,11 @@ use slog::{error, Logger};
 use std::collections::HashMap;
 use std::iter::Peekable;
 use std::{fs::File, io::Write, vec};
-use tokio::task::JoinHandle;
 use xml::reader::XmlEvent;
 use xml::EventReader;
 
 use crate::models::{
-    observation::Root as ObservationRoot,
+    noaa::observation::Root as ObservationRoot,
     station::{Root, Station},
     zone::Root as ZoneRoot,
 };
@@ -298,4 +297,26 @@ async fn get_forecast(
 
 async fn save_results(mapping: HashMap<String, Mapping>) -> Result<String, Error> {
     Ok("path".to_string())
+}
+
+fn wind_direction_to_angle(direction: &str) -> Option<f64> {
+    match direction.to_uppercase().as_str() {
+        "N" => Some(0.0),
+        "NNE" => Some(22.5),
+        "NE" => Some(45.0),
+        "ENE" => Some(67.5),
+        "E" => Some(90.0),
+        "ESE" => Some(112.5),
+        "SE" => Some(135.0),
+        "SSE" => Some(157.5),
+        "S" => Some(180.0),
+        "SSW" => Some(202.5),
+        "SW" => Some(225.0),
+        "WSW" => Some(247.5),
+        "W" => Some(270.0),
+        "WNW" => Some(292.5),
+        "NW" => Some(315.0),
+        "NNW" => Some(337.5),
+        _ => None, // Invalid wind direction
+    }
 }

@@ -67,11 +67,11 @@ pub struct Period {
     pub probability_of_precipitation: ProbabilityOfPrecipitation,
     pub dewpoint: Dewpoint,
     pub relative_humidity: RelativeHumidity,
-    pub wind_speed: String,
-    pub wind_direction: String,
-    pub icon: String,
-    pub short_forecast: String,
-    pub detailed_forecast: String,
+    pub wind_speed: Option<String>,
+    pub wind_direction: Option<String>,
+    pub icon: Option<String>,
+    pub short_forecast: Option<String>,
+    pub detailed_forecast: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -85,12 +85,12 @@ pub struct ProbabilityOfPrecipitation {
 #[serde(rename_all = "camelCase")]
 pub struct Dewpoint {
     pub unit_code: String,
-    pub value: f64,
+    pub value: Option<f64>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelativeHumidity {
     pub unit_code: String,
-    pub value: i64,
+    pub value: Option<i64>,
 }

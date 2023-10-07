@@ -1,9 +1,5 @@
-pub mod forecast;
-pub mod observation;
-pub mod station;
-pub mod zone;
+pub mod noaa;
+pub mod parquet;
 
-pub use forecast::*;
-pub use observation::*;
-pub use station::*;
-pub use zone::*;
+pub use noaa::*;
+pub use parquet::*;

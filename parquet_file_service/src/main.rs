@@ -41,7 +41,7 @@ pub fn app() -> Router {
     let serve_dir = ServeDir::new("assets").not_found_service(ServeFile::new("assets/index.html"));
 
     Router::new()
-        .route("/files", get(files))
+        .route("/files", get(files)) //TODO: add filtering based on observation vs forecast and time ranges
         .route("/file/:file_name", get(download))
         .route("/file/:file_name", post(save_request_body))
         .nest_service("/assets", serve_dir.clone())

@@ -29,14 +29,14 @@ pub fn create_forecast_schema() -> Type {
             .unwrap();
 
     let observation_latitude =
-        Type::primitive_type_builder("observation_latitude", PhysicalType::INT64)
+        Type::primitive_type_builder("observation_latitude", PhysicalType::FLOAT)
             .with_converted_type(ConvertedType::INT_64)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
 
     let observation_longitude =
-        Type::primitive_type_builder("observation_longitude", PhysicalType::INT64)
+        Type::primitive_type_builder("observation_longitude", PhysicalType::FLOAT)
             .with_converted_type(ConvertedType::INT_64)
             .with_repetition(Repetition::OPTIONAL)
             .build()
@@ -184,8 +184,8 @@ pub struct Forecast {
     pub zone_id: String,
     pub forecast_office_id: String,
     pub observation_station_id: String,
-    pub observation_latitude: i64,
-    pub observation_longitude: i64,
+    pub observation_latitude: f64,
+    pub observation_longitude: f64,
     pub updated: Option<String>,
     pub generated_at: Option<String>,
     pub day: i64,
@@ -232,13 +232,15 @@ impl From<&Mapping> for Vec<Forecast> {
                     wind_direction_unit_code = None;
                     wind_direction_value = None;
                 }
-
+                let raw_coordinates = value.raw_coordinates.clone();
+                let lat = *raw_coordinates.first().unwrap();
+                let long = *raw_coordinates.last().unwrap();
                 Forecast {
                     zone_id: value.zone_id.clone(),
                     forecast_office_id: value.forecast_office_id.clone(),
                     observation_station_id: value.observation_station_id.clone(),
-                    observation_latitude: value.observation_latitude as i64,
-                    observation_longitude: value.observation_longitude as i64,
+                    observation_latitude: lat,
+                    observation_longitude: long,
                     updated: Some(value.forecast_values.updated.clone()),
                     generated_at: Some(value.forecast_values.generated_at.clone()),
                     day: val.number,

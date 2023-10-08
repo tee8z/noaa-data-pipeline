@@ -4,9 +4,33 @@ use parquet::{
     record::RecordWriter,
 };
 use reqwest::Client;
+use slog::Logger;
 use std::{env, fs::File, io::Read, sync::Arc};
 
-use crate::{create_observation_schema, models::parquet::Forecast, station, Mapping, Observation};
+use crate::{create_observation_schema, models::parquet::Forecast, station, Mapping, Observation, Station, create_station_schema};
+
+pub fn save_stations(stations: Vec<Station>, file_name: String) -> String {
+    let full_name = format!("{}.parquet", file_name);
+
+    let file = File::create(full_name.clone()).unwrap();
+    let props = WriterProperties::builder().build();
+    let mut writer =
+        SerializedFileWriter::new(file, Arc::new(create_station_schema()), Arc::new(props))
+            .unwrap();
+
+    let mut row_group = writer.next_row_group().unwrap();
+    stations
+        .as_slice()
+        .write_to_row_group(&mut row_group)
+        .unwrap();
+    row_group.close().unwrap();
+    writer.close().unwrap();
+    full_name
+}
+
+pub fn read_station_file(logger: Logger, partial_name: String) -> String {
+    
+}
 
 pub fn save_observations(mappings: Vec<&Mapping>, file_name: String) -> String {
     let full_name = format!("{}.parquet", file_name);

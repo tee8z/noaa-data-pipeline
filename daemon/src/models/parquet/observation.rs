@@ -29,13 +29,13 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let observation_latitude =
-        Type::primitive_type_builder("observation_latitude", PhysicalType::INT64)
+        Type::primitive_type_builder("observation_latitude", PhysicalType::FLOAT)
             .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
 
     let observation_longitude =
-        Type::primitive_type_builder("observation_longitude", PhysicalType::INT64)
+        Type::primitive_type_builder("observation_longitude", PhysicalType::FLOAT)
             .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
@@ -316,8 +316,8 @@ pub struct Observation {
     pub zone_id: String,
     pub forecast_office_id: String,
     pub observation_station_id: String,
-    pub observation_latitude: i64,
-    pub observation_longitude: i64,
+    pub observation_latitude: f64,
+    pub observation_longitude: f64,
     pub observation_timestamp: String,
     pub elevation_unit_code: Option<String>,
     pub elevation_value: Option<f64>,
@@ -355,12 +355,15 @@ pub struct Observation {
 
 impl From<&Mapping> for Observation {
     fn from(value: &Mapping) -> Self {
+        let raw_coordinates = value.raw_coordinates.clone();
+                let lat = *raw_coordinates.first().unwrap();
+                let long = *raw_coordinates.last().unwrap();
         Self {
             zone_id: value.zone_id.to_string(),
             forecast_office_id: value.forecast_office_id.to_string(),
             observation_station_id: value.observation_station_id.to_string(),
-            observation_latitude: value.observation_latitude as i64,
-            observation_longitude: value.observation_longitude as i64,
+            observation_latitude: lat,
+            observation_longitude: long,
             observation_timestamp: value.observation_values.timestamp.to_string(),
             elevation_unit_code: Some(value.observation_values.elevation.unit_code.to_string()),
             elevation_value: value.observation_values.elevation.value,

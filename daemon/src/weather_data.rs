@@ -1,11 +1,11 @@
 use crate::models::{
     noaa::forecast::Root as ForecastRoot,
     noaa::observation::Root as ObservationRoot,
-    station::{Root, Station},
+    station::{Station, StationRoot},
     zone::Root as ZoneRoot,
 };
 use crate::{
-    parquet_handler::{save_forecasts, save_observations},
+    parquet_handler::{save_forecasts, save_observations, save_stations},
     Mapping,
 };
 use anyhow::{anyhow, Error};
@@ -16,54 +16,30 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::de::DeserializeOwned;
 use slog::{debug, error, info, Logger};
-use std::iter::Peekable;
+use std::vec;
 use std::{collections::HashMap, time::Duration};
-use std::{fs::File, io::Write, vec};
 use time::OffsetDateTime;
 use tokio::time::sleep;
-use xml::reader::XmlEvent;
-use xml::EventReader;
 
 //TODO: return path to parquet file
 pub async fn load_data(logger: Logger) -> Result<(String, String), Error> {
-    let path = r#"./stations.xml"#;
-    info!(logger.clone(), "started downloading stations file");
-    match download_file(path).await {
-        Ok(_) => (),
-        Err(e) => error!(logger.clone(), "error downloading station file: {}", e),
-    }
-    let stations = parse_xml_data(logger.clone(), path).await;
-    let stations2 = stations.clone();
-    let cleaned: Vec<Station> = stations
-        .iter()
-        .filter(|station| station.station_name.to_lowercase().contains("airport"))
-        .map(|station| Station {
-            station_id: station.station_id.to_string(),
-            state: station.state.to_string(),
-            station_name: station.station_name.to_string(),
-            latitude: station.latitude,
-            longitude: station.longitude,
-        })
-        .collect();
-    info!(logger.clone(), "completed stations file download");
     info!(
         logger.clone(),
-        "started to download station zones information"
+        "started to download stations and zone information"
     );
-    let zones = match get_stations_zones(logger.clone(), cleaned).await {
-        Ok(f) => Ok(f),
-        Err(e) => Err(anyhow!("error getting station zones: {}", e)),
-    }?;
+    let stations = get_stations(logger.clone()).await;
+    let current_utc_time: OffsetDateTime = OffsetDateTime::now_utc();
+    save_stations(stations.clone(), format!("{}_{}", "stations", current_utc_time));
     info!(
         logger.clone(),
-        "completed downloading station zones information: {}",
-        zones.len()
+        "completed downloading station and zones information: {}",
+        stations.len()
     );
     info!(
         logger.clone(),
         "started to download forecast offices information"
     );
-    let mapping = match get_forecast_offices(logger.clone(), zones).await {
+    let mapping = match get_forecast_offices(logger.clone(), stations.clone()).await {
         Ok(f) => Ok(f),
         Err(e) => Err(anyhow!("error getting mapping zones: {}", e)),
     }?;
@@ -73,12 +49,8 @@ pub async fn load_data(logger: Logger) -> Result<(String, String), Error> {
         mapping.len()
     );
     info!(logger.clone(), "started to download observations");
-    let cleaned2 = stations2
-        .iter()
-        .filter(|station| station.station_name.to_lowercase().contains("airport"))
-        .collect::<Vec<&Station>>();
     let mapping_with_observations =
-        match get_observation(logger.clone(), cleaned2, mapping.clone()).await {
+        match get_observation(logger.clone(), stations, mapping.clone()).await {
             Ok(f) => Ok(f),
             Err(e) => Err(anyhow!("error getting observation data for station: {}", e)),
         }?;
@@ -98,6 +70,7 @@ pub async fn load_data(logger: Logger) -> Result<(String, String), Error> {
             observation_latitude: item.observation_latitude,
             observation_longitude: item.observation_longitude,
             forecast_values: item.forecast_values.clone(),
+            raw_coordinates: item.raw_coordinates.clone(),
             observation_values: item.observation_values.clone(),
         })
         .collect();
@@ -134,77 +107,16 @@ pub async fn load_data(logger: Logger) -> Result<(String, String), Error> {
     Ok(parquet_files)
 }
 
-async fn download_file(path: &str) -> Result<(), anyhow::Error> {
-    let url = "https://w1.weather.gov/xml/current_obs/index.xml";
-    let client = Client::builder().user_agent("dataFetcher/1.0").build()?;
-    let response = client.get(url).send().await?;
-    if !response.status().is_success() {
-        return Err(anyhow!("status: {}", response.status()));
+async fn get_stations(logger: Logger) -> Result<Vec<Station>, Error> {
+    let station_file = read_station_file("stations");
+    if station_file.is_none() {
+        let stations = match fetch_station_data(logger.clone(), 500).await {
+            Ok(f) => Ok(f),
+            Err(e) => Err(anyhow!("error getting station zones: {}", e)),
+        }?;
     }
-    let mut output_file = File::create(path)?;
-    output_file
-        .write_all(&response.bytes().await.unwrap())
-        .unwrap();
-    output_file.flush()?;
-    Ok(())
-}
 
-async fn parse_xml_data<'a>(logger: Logger, file_path: &str) -> Vec<Station> {
-    let file = File::open(file_path).unwrap();
-    // Deserialize the XML into a Vec<Station> where each Station corresponds to a <station> element
-    let mut stations = vec![];
-    let parser = EventReader::new(file);
-    let mut current_element = String::from("");
-    let mut current_station: Option<Station> = None;
-    for event in parser {
-        match event {
-            Ok(XmlEvent::StartElement { name, .. }) => match name.local_name.as_str() {
-                "station" => {
-                    current_station = Some(Station {
-                        ..Default::default()
-                    })
-                }
-                "station_id" | "longitude" | "latitude" | "station_name" | "state" => {
-                    current_element = name.local_name.to_string();
-                }
-                &_ => {
-                    current_element = String::from("");
-                }
-            },
-            Ok(XmlEvent::Characters(val)) => {
-                if let Some(ref mut station) = current_station.as_mut() {
-                    match current_element.as_str() {
-                        "station_id" => station.station_id = val,
-                        "longitude" => station.longitude = val.parse::<f64>().unwrap(),
-                        "latitude" => station.latitude = val.parse::<f64>().unwrap(),
-                        "station_name" => station.station_name = val,
-                        "state" => station.state = val,
-                        &_ => {}
-                    }
-                }
-            }
-            Ok(XmlEvent::EndElement { name }) => match name.local_name.as_str() {
-                "station" => {
-                    if let Some(station) = current_station.as_ref() {
-                        stations.push(Station {
-                            station_id: station.station_id.to_string(),
-                            state: station.state.to_string(),
-                            station_name: station.station_name.to_string(),
-                            latitude: station.latitude,
-                            longitude: station.longitude,
-                        })
-                    }
-                }
-                _ => (),
-            },
-            Err(e) => {
-                error!(logger, "error parsing station xml file: {}", e);
-                break;
-            }
-            _ => {}
-        }
-    }
-    stations
+    Ok(stations)
 }
 
 async fn fetch_url<T>(logger: &Logger, url: &str) -> Result<T, Error>
@@ -225,88 +137,65 @@ where
     Ok(body)
 }
 
-async fn get_stations_zones(
-    logger: Logger,
-    stations: Vec<Station>,
-) -> Result<Vec<(String, String)>, Error> {
-    let page_size = 50;
-    let mut station_urls = vec![];
-    let mut stations_iter = stations.iter().peekable();
-    while let Some(_next) = stations_iter.peek() {
-        let mut next_collection = Vec::new();
-        for _ in 0..page_size {
-            if let Some(station) = stations_iter.next() {
-                next_collection.push(station.station_id.clone());
-            } else {
-                break; // No more items to take
-            }
-        }
-        let stations_param = join_url_param(next_collection);
-        let url = format!("https://api.weather.gov/stations?id={stations_param}&limit={page_size}");
-        let logger = logger.clone();
-        let task = tokio::spawn(async move { fetch_url::<Vec<Root>>(&logger, &url).await });
-        station_urls.push(task);
+async fn fetch_station_data(logger: Logger, page_size: usize) -> Result<Vec<Station>, Error> {
+    let url = format!("https://api.weather.gov/stations?limit={page_size}");
+
+    let mut next_url = Some(url.to_string());
+    let mut all_stations = vec![];
+    while let Some(url) = next_url {
+        let logger = &logger.clone();
+        let response = fetch_url::<StationRoot>(&logger, &url).await?;
+        let stations: Vec<Station> = response
+            .features
+            .iter()
+            .filter_map(|feature| {
+                if feature.properties.forecast.clone().is_none() {
+                    return None;
+                }
+                let station_id = feature.properties.station_identifier.to_string();
+                let forecast_url = feature.properties.forecast.clone().unwrap();
+                let zone: Vec<&str> = forecast_url.split("/").collect();
+                let zone_id = zone.last().unwrap().to_string();
+                let coords = feature.geometry.coordinates.clone();
+                let lat = *coords.first().unwrap();
+                let long = *coords.last().unwrap();
+                Some(Station {
+                    station_id,
+                    zone_id,
+                    station_name: feature.properties.name.to_string(),
+                    latitude: lat,
+                    longitude: long,
+                })
+            })
+            .collect();
+        all_stations.extend(stations);
+        next_url = response.pagination.next;
     }
 
-    let results = join_all(station_urls)
-        .await
-        .into_iter()
-        .filter_map(|result| {
-            let root_res = match result {
-                Ok(res) => match res {
-                    Ok(res) => Some(res),
-                    Err(e) => {
-                        error!(logger.clone(), "error getting item: {}", e);
-                        None
-                    }
-                },
-                Err(e) => {
-                    error!(logger.clone(), "error getting item: {}", e);
-                    None
-                }
-            };
-            if root_res.is_none() {
-                return None;
-            }
-
-            let station_to_zone: Vec<(String, String)> = root_res
-                .unwrap()
-                .iter()
-                .flat_map(|root| {
-                    root.features.iter().map(|feature| {
-                        let zone: Vec<&str> = feature.properties.forecast.split("/").collect();
-                        (
-                            feature.properties.station_identifier.to_string(),
-                            zone.last().unwrap().to_string(),
-                        )
-                    })
-                })
-                .collect();
-            Some(station_to_zone)
-        })
-        .flat_map(|item| item)
-        .collect();
-
-    Ok(results)
+    Ok(all_stations)
 }
 
 async fn get_forecast_offices(
     logger: Logger,
-    zones: Vec<(String, String)>,
+    stations: Vec<Station>,
 ) -> Result<HashMap<String, Mapping>, Error> {
     let mut zone_urls = vec![];
     let page_size = 50;
-    let mut zone_iter = zones.iter().peekable();
-    while let Some(_next) = zone_iter.peek() {
+    let mut station_iter = stations.iter().peekable();
+    while let Some(_next) = station_iter.peek() {
         let mut next_collection = Vec::new();
         for _ in 0..page_size {
-            if let Some(station) = zone_iter.next() {
-                next_collection.push(station.1.clone());
+            if let Some(station) = station_iter.next() {
+                next_collection.push(station);
             } else {
                 break; // No more items to take
             }
         }
-        let zone_params = join_url_param(next_collection);
+        let zone_ids = next_collection
+            .iter()
+            .map(|station| station.zone_id.clone())
+            .collect();
+        let zone_params = join_url_param(zone_ids);
         let url =
             format!("ttps://api.weather.gov/zones?id={zone_params}&type=land&limit={page_size}");
         zone_urls.push(url);
@@ -378,12 +267,12 @@ fn join_url_param(params: Vec<String>) -> String {
 
 async fn get_observation(
     logger: Logger,
-    aiport_stations: Vec<&Station>,
+    stations: Vec<Station>,
     mut mapping: HashMap<String, Mapping>,
 ) -> Result<HashMap<String, Mapping>, Error> {
-    let station_total = aiport_stations.len();
+    let station_total = stations.len();
     let step_size = station_total / 10; // 10% progress step size
-    let urls: Vec<_> = aiport_stations
+    let urls: Vec<_> = stations
         .iter()
         .map(|station| {
             format!(
@@ -450,10 +339,13 @@ async fn get_observation(
                 return;
             }
             let geo = root.geometry.unwrap();
+            mapping.raw_coordinates = geo.coordinates.clone();
+
             let lat = geo.coordinates.first().unwrap();
             let long = geo.coordinates.last().unwrap();
             mapping.observation_latitude = lat.abs() as u64;
             mapping.observation_longitude = long.abs() as u64;
+
             mapping.observation_values = root.properties;
         });
         if index % step_size == 0 {

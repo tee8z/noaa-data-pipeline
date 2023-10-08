@@ -1,3 +1,4 @@
+use parquet_derive::ParquetRecordWriter;
 use serde::{Deserialize, Serialize};
 
 use crate::{ForecastProperties, ObservationProperties};
@@ -9,15 +10,16 @@ pub struct Mapping {
     pub observation_station_id: String,
     pub observation_latitude: u64,
     pub observation_longitude: u64,
+    pub raw_coordinates: Vec<f64>,
     pub forecast_values: ForecastProperties,
     pub observation_values: ObservationProperties,
 }
 
-// from xml file
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default, ParquetRecordWriter)]
+#[serde(rename_all = "camelCase")]
 pub struct Station {
     pub station_id: String,
-    pub state: String,
+    pub zone_id: String,
     pub station_name: String,
     pub latitude: f64,
     pub longitude: f64,
@@ -27,7 +29,7 @@ pub struct Station {
 // https://api.weather.gov/stations?id=KPVG%2CKCNB&limit=500
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Root {
+pub struct StationRoot {
     #[serde(rename = "@context")]
     pub context: (String, Context),
     #[serde(rename = "type")]
@@ -169,9 +171,9 @@ pub struct Properties {
     pub station_identifier: String,
     pub name: String,
     pub time_zone: String,
-    pub forecast: String,
-    pub county: String,
-    pub fire_weather_zone: String,
+    pub forecast: Option<String>,
+    pub county: Option<String>,
+    pub fire_weather_zone: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -184,5 +186,5 @@ pub struct Elevation {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Pagination {
-    pub next: String,
+    pub next: Option<String>,
 }

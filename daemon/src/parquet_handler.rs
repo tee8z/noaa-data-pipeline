@@ -1,9 +1,10 @@
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use parquet::{
     file::{properties::WriterProperties, writer::SerializedFileWriter},
     record::RecordWriter,
 };
-use std::{fs::File, sync::Arc};
+use reqwest::Client;
+use std::{env, fs::File, io::Read, sync::Arc};
 
 use crate::{create_observation_schema, models::parquet::Forecast, station, Mapping, Observation};
 
@@ -51,9 +52,59 @@ pub fn save_forecasts(mappings: Vec<&Mapping>, file_name: String) -> String {
     writer.close().unwrap();
     full_name
 }
+pub async fn send_parquet_files(file_locations: (String, String)) -> Result<(), Error> {
+    let observation_path = get_full_path(file_locations.0.clone());
+    let forecast_path = get_full_path(file_locations.1.clone());
+    //TODO: make url configurable
+    let url_observ = format!("http://localhost:9100/{}", file_locations.0);
+    let url_forcast = format!("http://localhost:9100/{}", file_locations.1);
 
-
-// TODO: set up sending the two new parquet files generated to the api server
-pub fn send_parquet_files(_file_locations: (String, String)) -> Result<(), Error> {
+    send_file_to_endpoint(&observation_path, &url_observ).await?;
+    send_file_to_endpoint(&forecast_path, &url_forcast).await?;
     Ok(())
+}
+
+async fn send_file_to_endpoint(file_path: &str, endpoint_url: &str) -> Result<(), anyhow::Error> {
+    // Create a reqwest client.
+    let client = Client::new();
+
+    // Open the file for reading.
+    let mut file =
+        File::open(file_path).map_err(|e| anyhow!("error opening file to upload: {}", e))?;
+
+    // Create a buffer to read the file data into.
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)
+        .map_err(|e| anyhow!("error reading file to buffer: {}", e))?;
+
+    // Create a request builder for a POST request to the endpoint.
+    let request = client.post(endpoint_url).body(buffer);
+
+    // Send the request and handle the response.
+    let response = request
+        .send()
+        .await
+        .map_err(|e| anyhow!("error sending file to api: {}", e))?;
+
+    // Check the response status.
+    if response.status().is_success() {
+        println!("File successfully uploaded.");
+    } else {
+        println!(
+            "Failed to upload the file. Status code: {:?}",
+            response.status()
+        );
+    }
+
+    Ok(())
+}
+
+fn get_full_path(relative_path: String) -> String {
+    let mut current_dir = env::current_dir().expect("Failed to get current directory");
+
+    // Append the relative path to the current working directory
+    current_dir.push(relative_path);
+
+    // Convert the `PathBuf` to a `String` if needed
+    current_dir.to_string_lossy().to_string()
 }

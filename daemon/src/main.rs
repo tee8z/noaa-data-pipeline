@@ -19,7 +19,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // TODO run these two items in a task that runs every 10 or 20 minutes
     let file_locations = load_data(logger).await.unwrap();
-    send_parquet_files(file_locations)?;
+    send_parquet_files(file_locations).await?;
     Ok(())
 }
 

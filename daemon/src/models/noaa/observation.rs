@@ -7,12 +7,13 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct Root {
     #[serde(rename = "@context")]
-    pub context: (String, Context),
-    pub id: String,
+    pub context: Option<(String, Context)>,
+    pub id: Option<String>,
     #[serde(rename = "type")]
     pub type_field: String,
-    pub geometry: Geometry2,
-    pub properties: Properties,
+    pub geometry: Option<Geometry2>,
+    #[serde(rename = "properties")]
+    pub properties: ObservationProperties,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -20,30 +21,30 @@ pub struct Root {
 pub struct Context {
     #[serde(rename = "@version")]
     pub version: String,
-    pub wx: String,
-    pub s: String,
-    pub geo: String,
-    pub unit: String,
+    pub wx: Option<String>,
+    pub s: Option<String>,
+    pub geo: Option<String>,
+    pub unit: Option<String>,
     #[serde(rename = "@vocab")]
-    pub vocab: String,
-    pub geometry: Geometry,
-    pub city: String,
-    pub state: String,
-    pub distance: Distance,
-    pub bearing: Bearing,
-    pub value: Value,
-    pub unit_code: UnitCode,
-    pub forecast_office: ForecastOffice,
-    pub forecast_grid_data: ForecastGridData,
-    pub public_zone: PublicZone,
-    pub county: County,
+    pub vocab: Option<String>,
+    pub geometry: Option<Geometry>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub distance: Option<Distance>,
+    pub bearing: Option<Bearing>,
+    pub value: Option<Value>,
+    pub unit_code: Option<UnitCode>,
+    pub forecast_office: Option<ForecastOffice>,
+    pub forecast_grid_data: Option<ForecastGridData>,
+    pub public_zone: Option<PublicZone>,
+    pub county: Option<County>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Geometry {
     #[serde(rename = "@id")]
-    pub id: String,
+    pub id: Option<String>,
     #[serde(rename = "@type")]
     pub type_field: String,
 }
@@ -52,7 +53,7 @@ pub struct Geometry {
 #[serde(rename_all = "camelCase")]
 pub struct Distance {
     #[serde(rename = "@id")]
-    pub id: String,
+    pub id: Option<String>,
     #[serde(rename = "@type")]
     pub type_field: String,
 }
@@ -68,14 +69,14 @@ pub struct Bearing {
 #[serde(rename_all = "camelCase")]
 pub struct Value {
     #[serde(rename = "@id")]
-    pub id: String,
+    pub id: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnitCode {
     #[serde(rename = "@id")]
-    pub id: String,
+    pub id: Option<String>,
     #[serde(rename = "@type")]
     pub type_field: String,
 }
@@ -118,9 +119,9 @@ pub struct Geometry2 {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Properties {
+pub struct ObservationProperties {
     #[serde(rename = "@id")]
-    pub id: String,
+    pub id: Option<String>,
     #[serde(rename = "@type")]
     pub type_field: String,
     pub elevation: Elevation,
@@ -157,14 +158,14 @@ pub struct Properties {
 #[serde(rename_all = "camelCase")]
 pub struct Elevation {
     pub unit_code: String,
-    pub value: Option<i64>,
+    pub value: Option<f64>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Temperature {
     pub unit_code: String,
-    pub value: Option<i64>,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -172,7 +173,7 @@ pub struct Temperature {
 #[serde(rename_all = "camelCase")]
 pub struct Dewpoint {
     pub unit_code: String,
-    pub value: Option<i64>,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -204,7 +205,7 @@ pub struct WindGust {
 #[serde(rename_all = "camelCase")]
 pub struct BarometricPressure {
     pub unit_code: String,
-    pub value: Option<i64>,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -220,7 +221,7 @@ pub struct SeaLevelPressure {
 #[serde(rename_all = "camelCase")]
 pub struct Visibility {
     pub unit_code: String,
-    pub value: Option<i64>,
+    pub value: Option<f64>,
     pub quality_control: String,
 }
 
@@ -297,5 +298,5 @@ pub struct CloudLayer {
 #[serde(rename_all = "camelCase")]
 pub struct Base {
     pub unit_code: String,
-    pub value: i64,
+    pub value: f64,
 }

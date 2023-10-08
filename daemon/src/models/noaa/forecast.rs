@@ -10,7 +10,8 @@ pub struct Root {
     #[serde(rename = "type")]
     pub type_field: String,
     pub geometry: Geometry,
-    pub properties: Properties,
+    #[serde(rename = "properties")]
+    pub properties: ForecastProperties,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -35,7 +36,7 @@ pub struct Geometry {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Properties {
+pub struct ForecastProperties {
     pub updated: String,
     pub units: String,
     pub forecast_generator: String,

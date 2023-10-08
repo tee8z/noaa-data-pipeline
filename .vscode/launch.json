@@ -7,15 +7,34 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'noaa-data-pipeline'",
+            "name": "Debug unit tests in library 'daemon'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=daemon"
+                ],
+                "filter": {
+                    "name": "daemon",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'daemon'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=noaa-data-pipeline",
-                    "--package=noaa-data-pipeline"
+                    "--bin=daemon",
+                    "--package=daemon"
                 ],
                 "filter": {
-                    "name": "noaa-data-pipeline",
+                    "name": "daemon",
                     "kind": "bin"
                 }
             },
@@ -25,16 +44,53 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'noaa-data-pipeline'",
+            "name": "Debug unit tests in executable 'daemon'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=noaa-data-pipeline",
-                    "--package=noaa-data-pipeline"
+                    "--bin=daemon",
+                    "--package=daemon"
                 ],
                 "filter": {
-                    "name": "noaa-data-pipeline",
+                    "name": "daemon",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'parquet_file_service'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=parquet_file_service",
+                    "--package=parquet_file_service"
+                ],
+                "filter": {
+                    "name": "parquet_file_service",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'parquet_file_service'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=parquet_file_service",
+                    "--package=parquet_file_service"
+                ],
+                "filter": {
+                    "name": "parquet_file_service",
                     "kind": "bin"
                 }
             },

@@ -54,7 +54,7 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let elevation_value = Type::primitive_type_builder("elevation_value", PhysicalType::INT64)
+    let elevation_value = Type::primitive_type_builder("elevation_value", PhysicalType::FLOAT)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -66,7 +66,7 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let temperature_value = Type::primitive_type_builder("temperature_value", PhysicalType::INT64)
+    let temperature_value = Type::primitive_type_builder("temperature_value", PhysicalType::FLOAT)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -85,7 +85,7 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let dewpoint_value = Type::primitive_type_builder("dewpoint_value", PhysicalType::INT64)
+    let dewpoint_value = Type::primitive_type_builder("dewpoint_value", PhysicalType::FLOAT)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -163,7 +163,7 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let barometric_pressure_value =
-        Type::primitive_type_builder("barometric_pressure_value", PhysicalType::INT64)
+        Type::primitive_type_builder("barometric_pressure_value", PhysicalType::FLOAT)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
@@ -206,7 +206,7 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let visibility_value = Type::primitive_type_builder("visibility_value", PhysicalType::INT64)
+    let visibility_value = Type::primitive_type_builder("visibility_value", PhysicalType::FLOAT)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -320,12 +320,12 @@ pub struct Observation {
     pub observation_longitude: i64,
     pub observation_timestamp: String,
     pub elevation_unit_code: Option<String>,
-    pub elevation_value: Option<i64>,
+    pub elevation_value: Option<f64>,
     pub temperature_unit_code: Option<String>,
-    pub temperature_value: Option<i64>,
+    pub temperature_value: Option<f64>,
     pub temperature_quality_control: Option<String>,
     pub dewpoint_unit_code: Option<String>,
-    pub dewpoint_value: Option<i64>,
+    pub dewpoint_value: Option<f64>,
     pub dewpoint_quality_control: Option<String>,
     pub wind_direction_unit_code: Option<String>,
     pub wind_direction_value: Option<f64>,
@@ -337,13 +337,13 @@ pub struct Observation {
     pub wind_gust_value: Option<f64>,
     pub wind_gust_quality_control: Option<String>,
     pub barometric_pressure_unit_code: Option<String>,
-    pub barometric_pressure_value: Option<i64>,
+    pub barometric_pressure_value: Option<f64>,
     pub barometric_pressure_quality_control: Option<String>,
     pub sea_level_pressure_unit_code: Option<String>,
     pub sea_level_pressure_value: Option<f64>,
     pub sea_level_pressure_quality_control: Option<String>,
     pub visibility_unit_code: Option<String>,
-    pub visibility_value: Option<i64>,
+    pub visibility_value: Option<f64>,
     pub visibility_quality_control: Option<String>,
     pub precipitation_last_hour_unit_code: Option<String>,
     pub precipitation_last_hour_value: Option<f64>,

@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{
-    noaa::{forecast, observation},
-};
+use crate::{ForecastProperties, ObservationProperties};
 // combined results
 #[derive(Debug, Default, Clone)]
 pub struct Mapping {
@@ -11,8 +9,8 @@ pub struct Mapping {
     pub observation_station_id: String,
     pub observation_latitude: u64,
     pub observation_longitude: u64,
-    pub forecast_values: forecast::Properties,
-    pub observation_values: observation::Properties,
+    pub forecast_values: ForecastProperties,
+    pub observation_values: ObservationProperties,
 }
 
 // from xml file
@@ -44,24 +42,24 @@ pub struct Root {
 pub struct Context {
     #[serde(rename = "@version")]
     pub version: String,
-    pub wx: String,
-    pub s: String,
-    pub geo: String,
-    pub unit: String,
+    pub wx: Option<String>,
+    pub s: Option<String>,
+    pub geo: Option<String>,
+    pub unit: Option<String>,
     #[serde(rename = "@vocab")]
     pub vocab: String,
-    pub geometry: Geometry,
-    pub city: String,
-    pub state: String,
-    pub distance: Distance,
-    pub bearing: Bearing,
-    pub value: Value,
-    pub unit_code: UnitCode,
-    pub forecast_office: ForecastOffice,
-    pub forecast_grid_data: ForecastGridData,
-    pub public_zone: PublicZone,
-    pub county: County,
-    pub observation_stations: ObservationStations,
+    pub geometry: Option<Geometry>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub distance: Option<Distance>,
+    pub bearing: Option<Bearing>,
+    pub value: Option<Value>,
+    pub unit_code: Option<UnitCode>,
+    pub forecast_office: Option<ForecastOffice>,
+    pub forecast_grid_data: Option<ForecastGridData>,
+    pub public_zone: Option<PublicZone>,
+    pub county: Option<County>,
+    pub observation_stations: Option<ObservationStations>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

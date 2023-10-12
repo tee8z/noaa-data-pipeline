@@ -21,12 +21,12 @@ pub fn create_station_schema() -> Type {
         .build()
         .unwrap();
 
-    let latitude = Type::primitive_type_builder("latitude", PhysicalType::FLOAT)
+    let latitude = Type::primitive_type_builder("latitude", PhysicalType::DOUBLE)
         .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
 
-    let longitude = Type::primitive_type_builder("longitude", PhysicalType::FLOAT)
+    let longitude = Type::primitive_type_builder("longitude", PhysicalType::DOUBLE)
         .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();

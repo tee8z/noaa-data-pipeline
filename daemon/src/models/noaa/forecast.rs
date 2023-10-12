@@ -6,10 +6,10 @@ use serde_json::Value;
 #[serde(rename_all = "camelCase")]
 pub struct Root {
     #[serde(rename = "@context")]
-    pub context: (String, Context),
+    pub context: Option<(String, Context)>,
     #[serde(rename = "type")]
-    pub type_field: String,
-    pub geometry: Geometry,
+    pub type_field: Option<String>,
+    pub geometry: Option<Geometry>,
     #[serde(rename = "properties")]
     pub properties: ForecastProperties,
 }

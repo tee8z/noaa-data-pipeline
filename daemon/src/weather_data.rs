@@ -1,8 +1,11 @@
-use crate::models::{
-    noaa::forecast::Root as ForecastRoot,
-    noaa::observation::Root as ObservationRoot,
-    station::{Station, StationRoot},
-    zone::Root as ZoneRoot,
+use crate::{
+    models::{
+        noaa::forecast::Root as ForecastRoot,
+        noaa::observation::Root as ObservationRoot,
+        station::{Station, StationRoot},
+        zone::Root as ZoneRoot,
+    },
+    read_station_file, FileError,
 };
 use crate::{
     parquet_handler::{save_forecasts, save_observations, save_stations},
@@ -16,8 +19,8 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::de::DeserializeOwned;
 use slog::{debug, error, info, Logger};
-use std::vec;
 use std::{collections::HashMap, time::Duration};
+use std::vec;
 use time::OffsetDateTime;
 use tokio::time::sleep;
 
@@ -27,9 +30,13 @@ pub async fn load_data(logger: Logger) -> Result<(String, String), Error> {
         logger.clone(),
         "started to download stations and zone information"
     );
-    let stations = get_stations(logger.clone()).await;
+    let root_data = "./data";
+    let stations = get_stations(logger.clone(), root_data).await?;
     let current_utc_time: OffsetDateTime = OffsetDateTime::now_utc();
-    save_stations(stations.clone(), format!("{}_{}", "stations", current_utc_time));
+    save_stations(
+        stations.clone(),
+        format!("{}/stations_{}", root_data, current_utc_time),
+    );
     info!(
         logger.clone(),
         "completed downloading station and zones information: {}",
@@ -39,25 +46,30 @@ pub async fn load_data(logger: Logger) -> Result<(String, String), Error> {
         logger.clone(),
         "started to download forecast offices information"
     );
-    let mapping = match get_forecast_offices(logger.clone(), stations.clone()).await {
+    let forecast_data = match get_forecast_offices(logger.clone(), stations.clone()).await {
         Ok(f) => Ok(f),
         Err(e) => Err(anyhow!("error getting mapping zones: {}", e)),
     }?;
     info!(
         logger.clone(),
         "completed downloading forecast offices information: {}",
-        mapping.len()
+        forecast_data.mappings.len()
     );
     info!(logger.clone(), "started to download observations");
-    let mapping_with_observations =
-        match get_observation(logger.clone(), stations, mapping.clone()).await {
-            Ok(f) => Ok(f),
-            Err(e) => Err(anyhow!("error getting observation data for station: {}", e)),
-        }?;
+    let mapping_with_observations = match get_observation(
+        logger.clone(),
+        forecast_data.stations,
+        forecast_data.mappings.clone(),
+    )
+    .await
+    {
+        Ok(f) => Ok(f),
+        Err(e) => Err(anyhow!("error getting observation data for station: {}", e)),
+    }?;
     info!(
         logger.clone(),
         "completed downloading observations {}",
-        mapping.len()
+        forecast_data.mappings.len()
     );
 
     let values: Vec<_> = mapping_with_observations
@@ -92,7 +104,7 @@ pub async fn load_data(logger: Logger) -> Result<(String, String), Error> {
         "started saving parquet files of observation and forecasts data"
     );
 
-    let parquet_files = match save_results(all_station_data).await {
+    let parquet_files = match save_results("./data", all_station_data).await {
         Ok(f) => Ok(f),
         Err(e) => Err(anyhow!(
             "error saving parquet files for weather data: {}",
@@ -107,16 +119,15 @@ pub async fn load_data(logger: Logger) -> Result<(String, String), Error> {
     Ok(parquet_files)
 }
 
-async fn get_stations(logger: Logger) -> Result<Vec<Station>, Error> {
-    let station_file = read_station_file("stations");
-    if station_file.is_none() {
-        let stations = match fetch_station_data(logger.clone(), 500).await {
+async fn get_stations(logger: Logger, root_data: &str) -> Result<Vec<Station>, Error> {
+    // TODO: make root_path configurable
+    match read_station_file(logger.clone(), root_data, String::from("stations")) {
+        Ok(stations) => Ok(stations),
+        Err(FileError::NotFound) => match fetch_station_data(logger.clone(), 500, 5).await {
             Ok(f) => Ok(f),
             Err(e) => Err(anyhow!("error getting station zones: {}", e)),
-        }?;
+        },
     }
-
-    Ok(stations)
 }
 
 async fn fetch_url<T>(logger: &Logger, url: &str) -> Result<T, Error>
@@ -124,25 +135,39 @@ where
     T: DeserializeOwned,
 {
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    let client = ClientBuilder::new(Client::builder().user_agent("dataFetcher/1.0").build()?)
+    let client = ClientBuilder::new(Client::builder().user_agent("fetching_data/1.0").build()?)
         .with(RetryTransientMiddleware::new_with_policy(retry_policy))
         .build();
 
     debug!(logger.clone(), "requesting: {}", url);
     let response = client.get(url).send().await.map_err(|e| {
-        debug!(logger.clone(), "error sending request: {}", e);
+        error!(logger.clone(), "error sending request: {}", e);
         anyhow!("error sending request: {}", e)
     })?;
-    let body = response.json::<T>().await?;
-    Ok(body)
+    match response.json::<T>().await {
+        Ok(body) => Ok(body),
+        Err(e) => {
+            error!(logger.clone(), "error sending request: {}", e);
+            Err(anyhow!("error parsing body of request: {}", e))
+        }
+    }
 }
 
-async fn fetch_station_data(logger: Logger, page_size: usize) -> Result<Vec<Station>, Error> {
+async fn fetch_station_data(
+    logger: Logger,
+    page_size: usize,
+    max_calls: usize,
+) -> Result<Vec<Station>, Error> {
     let url = format!("https://api.weather.gov/stations?limit={page_size}");
 
     let mut next_url = Some(url.to_string());
     let mut all_stations = vec![];
+    let mut call_count = 0;
     while let Some(url) = next_url {
+        if max_calls < call_count {
+            break;
+        }
+        call_count += 1;
         let logger = &logger.clone();
         let response = fetch_url::<StationRoot>(&logger, &url).await?;
         let stations: Vec<Station> = response
@@ -175,10 +200,15 @@ async fn fetch_station_data(logger: Logger, page_size: usize) -> Result<Vec<Stat
     Ok(all_stations)
 }
 
+pub struct ForecastOfficeData {
+    pub stations: Vec<Station>,
+    pub mappings: HashMap<String, Mapping>,
+}
+
 async fn get_forecast_offices(
     logger: Logger,
     stations: Vec<Station>,
-) -> Result<HashMap<String, Mapping>, Error> {
+) -> Result<ForecastOfficeData, Error> {
     let mut zone_urls = vec![];
     let page_size = 50;
     let mut station_iter = stations.iter().peekable();
@@ -197,7 +227,7 @@ async fn get_forecast_offices(
             .collect();
         let zone_params = join_url_param(zone_ids);
         let url =
-            format!("ttps://api.weather.gov/zones?id={zone_params}&type=land&limit={page_size}");
+            format!("https://api.weather.gov/zones?id={zone_params}&type=land&limit={page_size}");
         zone_urls.push(url);
     }
     //TODO: make this configurable
@@ -207,6 +237,7 @@ async fn get_forecast_offices(
         .chunks(chunk_size)
         .map(|chunk| chunk.to_vec())
         .collect();
+    let mut stations_found: Vec<Station> = vec![];
     for (index, chunks) in url_chunks.iter().enumerate() {
         info!(logger.clone(), "starting to process chunk {}", index);
         let tasks = chunks.iter().map(|url| {
@@ -214,55 +245,67 @@ async fn get_forecast_offices(
             let url = url.clone();
             tokio::spawn(async move { fetch_url::<ZoneRoot>(&logger, &url).await })
         });
-        let results = join_all(tasks)
-            .await
+        let tasks_results = join_all(tasks).await;
+        let results = tasks_results
             .into_iter()
-            .flat_map(|result| {
-                let station_zone_office = result
+            .filter_map(|result| {
+                let res = result.unwrap();
+                let features = res.unwrap().features;
+
+                if features.is_none() {
+                    return None;
+                }
+                let station_zone_office = features
                     .unwrap()
-                    .unwrap()
-                    .features
                     .iter()
-                    .map(|feature| {
-                        //TODO: see how often there actually are collections on these
-                        let observation_station: Vec<&str> = feature
-                            .properties
-                            .observation_stations
-                            .first()
-                            .unwrap()
-                            .split("/")
-                            .collect();
-                        let office: Vec<&str> = feature
-                            .properties
-                            .forecast_offices
-                            .first()
-                            .unwrap()
-                            .split("/")
-                            .collect();
+                    .filter_map(|feature| {
+                        //TODO: see how often there actually are more than 1 item in this collections
+                        let first_station = feature.properties.observation_stations.first();
+                        if first_station.is_none() {
+                            return None;
+                        }
+                        let observation_station: Vec<&str> =
+                            first_station.unwrap().split("/").collect();
+                        let office: Vec<&str> = first_station.unwrap().split("/").collect();
                         let mapping = Mapping {
                             observation_station_id: observation_station.last().unwrap().to_string(),
                             forecast_office_id: office.last().unwrap().to_string(),
                             zone_id: feature.properties.id2.to_string(),
                             ..Default::default()
                         };
-                        (mapping.observation_station_id.clone(), mapping)
+                        match stations
+                            .iter()
+                            .find(|station| station.station_id == mapping.observation_station_id)
+                        {
+                            Some(station) => stations_found.push(station.to_owned()),
+                            None => (),
+                        }
+                        Some((mapping.observation_station_id.clone(), mapping))
                     })
                     .collect::<HashMap<String, Mapping>>();
-                station_zone_office
+                Some(station_zone_office)
             })
+            .flat_map(|map| map)
             .collect::<HashMap<String, Mapping>>();
-        all_results.extend(results);
-        info!(logger.clone(), "completed chunk {} and pausing", index);
+        all_results.extend(results.clone());
+        info!(
+            logger.clone(),
+            "completed chunk {} found {} and pausing",
+            index,
+            results.len()
+        );
         //TODO: make this configurable
         let pause_duration = Duration::from_secs(1);
         sleep(pause_duration).await;
     }
-
-    Ok(all_results)
+    Ok(ForecastOfficeData {
+        stations: stations_found,
+        mappings: all_results,
+    })
 }
 
 fn join_url_param(params: Vec<String>) -> String {
-    params.join("%2")
+    params.join("%2C")
 }
 
 async fn get_observation(
@@ -298,7 +341,8 @@ async fn get_observation(
             task
         });
 
-        join_all(tasks).await.into_iter().for_each(|re| {
+        let tasks_results = join_all(tasks).await;
+        tasks_results.into_iter().for_each(|re| {
             let root_res = match re {
                 Ok(res) => match res {
                     Ok(res) => Some(res),
@@ -316,11 +360,15 @@ async fn get_observation(
                 return;
             }
             let root = root_res.unwrap();
-            let station_url = root.properties.station.split("/").last();
+            if root.clone().properties.is_none() {
+                return;
+            }
+            let properties = root.clone().properties.unwrap();
+            let station_url = properties.station.split("/").last();
             if station_url.is_none() {
                 return;
             }
-            let find_mapping = mapping.get_mut(station_url.unwrap());
+            let find_mapping = mapping.get_mut(station_url.unwrap().trim());
             if find_mapping.is_none() {
                 debug!(
                     logger.clone(),
@@ -346,7 +394,7 @@ async fn get_observation(
             mapping.observation_latitude = lat.abs() as u64;
             mapping.observation_longitude = long.abs() as u64;
 
-            mapping.observation_values = root.properties;
+            mapping.observation_values = root.properties.unwrap();
         });
         if index % step_size == 0 {
             let progress = (index as f64 / station_total as f64) * 100.0;
@@ -402,13 +450,21 @@ async fn get_forecast(
     Ok(mapping)
 }
 
-async fn save_results(mapping: HashMap<String, Mapping>) -> Result<(String, String), Error> {
+async fn save_results(
+    root_path: &str,
+    mapping: HashMap<String, Mapping>,
+) -> Result<(String, String), Error> {
     let values: Vec<&Mapping> = mapping.values().collect();
     let current_utc_time: OffsetDateTime = OffsetDateTime::now_utc();
     let observations_parquet = save_observations(
         values.clone(),
+        root_path,
         format!("{}_{}", "observations", current_utc_time),
     );
-    let forecast_parquet = save_forecasts(values, format!("{}_{}", "forecasts", current_utc_time));
+    let forecast_parquet = save_forecasts(
+        values,
+        root_path,
+        format!("{}_{}", "forecasts", current_utc_time),
+    );
     Ok((observations_parquet, forecast_parquet))
 }

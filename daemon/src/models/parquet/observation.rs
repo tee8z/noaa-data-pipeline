@@ -29,13 +29,13 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let observation_latitude =
-        Type::primitive_type_builder("observation_latitude", PhysicalType::FLOAT)
+        Type::primitive_type_builder("observation_latitude", PhysicalType::DOUBLE)
             .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
 
     let observation_longitude =
-        Type::primitive_type_builder("observation_longitude", PhysicalType::FLOAT)
+        Type::primitive_type_builder("observation_longitude", PhysicalType::DOUBLE)
             .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
@@ -54,7 +54,7 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let elevation_value = Type::primitive_type_builder("elevation_value", PhysicalType::FLOAT)
+    let elevation_value = Type::primitive_type_builder("elevation_value", PhysicalType::DOUBLE)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -66,7 +66,7 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let temperature_value = Type::primitive_type_builder("temperature_value", PhysicalType::FLOAT)
+    let temperature_value = Type::primitive_type_builder("temperature_value", PhysicalType::DOUBLE)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -85,7 +85,7 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let dewpoint_value = Type::primitive_type_builder("dewpoint_value", PhysicalType::FLOAT)
+    let dewpoint_value = Type::primitive_type_builder("dewpoint_value", PhysicalType::DOUBLE)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -105,7 +105,7 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let wind_direction_value =
-        Type::primitive_type_builder("wind_direction_value", PhysicalType::FLOAT)
+        Type::primitive_type_builder("wind_direction_value", PhysicalType::DOUBLE)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
@@ -124,7 +124,7 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let wind_speed_value = Type::primitive_type_builder("wind_speed_value", PhysicalType::FLOAT)
+    let wind_speed_value = Type::primitive_type_builder("wind_speed_value", PhysicalType::DOUBLE)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -143,7 +143,7 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let wind_gust_value = Type::primitive_type_builder("wind_gust_value", PhysicalType::FLOAT)
+    let wind_gust_value = Type::primitive_type_builder("wind_gust_value", PhysicalType::DOUBLE)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -163,7 +163,7 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let barometric_pressure_value =
-        Type::primitive_type_builder("barometric_pressure_value", PhysicalType::FLOAT)
+        Type::primitive_type_builder("barometric_pressure_value", PhysicalType::DOUBLE)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
@@ -185,7 +185,7 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let sea_level_pressure_value =
-        Type::primitive_type_builder("sea_level_pressure_value", PhysicalType::FLOAT)
+        Type::primitive_type_builder("sea_level_pressure_value", PhysicalType::DOUBLE)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
@@ -206,7 +206,7 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let visibility_value = Type::primitive_type_builder("visibility_value", PhysicalType::FLOAT)
+    let visibility_value = Type::primitive_type_builder("visibility_value", PhysicalType::DOUBLE)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -228,7 +228,7 @@ pub fn create_observation_schema() -> Type {
     .unwrap();
 
     let precip_last_hour_value =
-        Type::primitive_type_builder("precipitation_last_hour_value", PhysicalType::FLOAT)
+        Type::primitive_type_builder("precipitation_last_hour_value", PhysicalType::DOUBLE)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
@@ -250,7 +250,7 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let relative_humidity_value =
-        Type::primitive_type_builder("relative_humidity_value", PhysicalType::FLOAT)
+        Type::primitive_type_builder("relative_humidity_value", PhysicalType::DOUBLE)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
@@ -356,8 +356,8 @@ pub struct Observation {
 impl From<&Mapping> for Observation {
     fn from(value: &Mapping) -> Self {
         let raw_coordinates = value.raw_coordinates.clone();
-                let lat = *raw_coordinates.first().unwrap();
-                let long = *raw_coordinates.last().unwrap();
+        let lat = *raw_coordinates.first().unwrap();
+        let long = *raw_coordinates.last().unwrap();
         Self {
             zone_id: value.zone_id.to_string(),
             forecast_office_id: value.forecast_office_id.to_string(),
@@ -457,21 +457,30 @@ impl From<&Mapping> for Observation {
                     .quality_control
                     .to_string(),
             ),
-            precipitation_last_hour_unit_code: Some(
-                value
-                    .observation_values
-                    .precipitation_last_hour
-                    .unit_code
-                    .to_string(),
-            ),
-            precipitation_last_hour_value: value.observation_values.precipitation_last_hour.value,
-            precipitation_last_hour_quality_control: Some(
-                value
-                    .observation_values
-                    .precipitation_last_hour
-                    .quality_control
-                    .to_string(),
-            ),
+            precipitation_last_hour_unit_code: match value
+                .observation_values
+                .precipitation_last_hour
+                .clone()
+            {
+                Some(val) => Some(val.unit_code.to_string()),
+                None => None,
+            },
+            precipitation_last_hour_value: match value
+                .observation_values
+                .precipitation_last_hour
+                .clone()
+            {
+                Some(val) => val.value,
+                None => None,
+            },
+            precipitation_last_hour_quality_control: match value
+                .observation_values
+                .precipitation_last_hour
+                .clone()
+            {
+                Some(val) => Some(val.quality_control.to_string()),
+                None => None,
+            },
             relative_humidity_unit_code: Some(
                 value
                     .observation_values

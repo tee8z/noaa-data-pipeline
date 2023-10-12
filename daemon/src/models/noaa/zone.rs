@@ -6,10 +6,10 @@ use serde_json::Value;
 #[serde(rename_all = "camelCase")]
 pub struct Root {
     #[serde(rename = "@context")]
-    pub context: Context,
+    pub context: Option<Context>,
     #[serde(rename = "type")]
-    pub type_field: String,
-    pub features: Vec<Feature>,
+    pub type_field: Option<String>,
+    pub features: Option<Vec<Feature>>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -25,7 +25,7 @@ pub struct Feature {
     pub id: String,
     #[serde(rename = "type")]
     pub type_field: String,
-    pub geometry: Value,
+    pub geometry: Option<Value>,
     pub properties: Properties,
 }
 
@@ -40,13 +40,13 @@ pub struct Properties {
     pub id2: String,
     #[serde(rename = "type")]
     pub type_field2: String,
-    pub name: String,
-    pub effective_date: String,
-    pub expiration_date: String,
-    pub state: String,
-    pub cwa: Vec<String>,
+    pub name: Option<String>,
+    pub effective_date: Option<String>,
+    pub expiration_date: Option<String>,
+    pub state: Option<String>,
+    pub cwa: Option<Vec<String>>,
     pub forecast_offices: Vec<String>,
-    pub time_zone: Vec<String>,
+    pub time_zone: Option<Vec<String>>,
     pub observation_stations: Vec<String>,
-    pub radar_station: String,
+    pub radar_station: Option<String>,
 }

@@ -29,14 +29,14 @@ pub fn create_forecast_schema() -> Type {
             .unwrap();
 
     let observation_latitude =
-        Type::primitive_type_builder("observation_latitude", PhysicalType::FLOAT)
+        Type::primitive_type_builder("observation_latitude", PhysicalType::DOUBLE)
             .with_converted_type(ConvertedType::INT_64)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();
 
     let observation_longitude =
-        Type::primitive_type_builder("observation_longitude", PhysicalType::FLOAT)
+        Type::primitive_type_builder("observation_longitude", PhysicalType::DOUBLE)
             .with_converted_type(ConvertedType::INT_64)
             .with_repetition(Repetition::OPTIONAL)
             .build()
@@ -117,7 +117,7 @@ pub fn create_forecast_schema() -> Type {
             .build()
             .unwrap();
 
-    let dewpoint_value = Type::primitive_type_builder("dewpoint_value", PhysicalType::FLOAT)
+    let dewpoint_value = Type::primitive_type_builder("dewpoint_value", PhysicalType::DOUBLE)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -143,7 +143,7 @@ pub fn create_forecast_schema() -> Type {
             .unwrap();
 
     let wind_direction_value =
-        Type::primitive_type_builder("wind_direction_value", PhysicalType::FLOAT)
+        Type::primitive_type_builder("wind_direction_value", PhysicalType::DOUBLE)
             .with_repetition(Repetition::OPTIONAL)
             .build()
             .unwrap();

@@ -13,7 +13,7 @@ pub struct Root {
     pub type_field: String,
     pub geometry: Option<Geometry2>,
     #[serde(rename = "properties")]
-    pub properties: ObservationProperties,
+    pub properties: Option<ObservationProperties>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -129,7 +129,7 @@ pub struct ObservationProperties {
     pub timestamp: String,
     pub raw_message: String,
     pub text_description: String,
-    pub icon: String,
+    pub icon: Option<String>,
     pub present_weather: Vec<Value>,
     pub temperature: Temperature,
     pub dewpoint: Dewpoint,
@@ -143,15 +143,15 @@ pub struct ObservationProperties {
     pub max_temperature_last24hours: MaxTemperatureLast24Hours,
     #[serde(rename = "minTemperatureLast24Hours")]
     pub min_temperature_last24hours: MinTemperatureLast24Hours,
-    pub precipitation_last_hour: PrecipitationLastHour,
+    pub precipitation_last_hour: Option<PrecipitationLastHour>,
     #[serde(rename = "precipitationLast3Hours")]
-    pub precipitation_last3hours: PrecipitationLast3Hours,
+    pub precipitation_last3hours: Option<PrecipitationLast3Hours>,
     #[serde(rename = "precipitationLast6Hours")]
-    pub precipitation_last6hours: PrecipitationLast6Hours,
+    pub precipitation_last6hours: Option<PrecipitationLast6Hours>,
     pub relative_humidity: RelativeHumidity,
     pub wind_chill: WindChill,
     pub heat_index: HeatIndex,
-    pub cloud_layers: Vec<CloudLayer>,
+    pub cloud_layers: Option<Vec<CloudLayer>>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -291,12 +291,12 @@ pub struct HeatIndex {
 #[serde(rename_all = "camelCase")]
 pub struct CloudLayer {
     pub base: Base,
-    pub amount: String,
+    pub amount: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Base {
     pub unit_code: String,
-    pub value: f64,
+    pub value: Option<f64>,
 }

@@ -1,3 +1,5 @@
+use parquet::record::RowAccessor;
+use parquet::{errors::ParquetError, record::Row};
 use parquet_derive::ParquetRecordWriter;
 use serde::{Deserialize, Serialize};
 
@@ -25,15 +27,32 @@ pub struct Station {
     pub longitude: f64,
 }
 
+impl Station {
+    pub fn from_parquet_row(self, row: &Row) -> Result<Self, ParquetError> {
+        let station_id = row.get_bytes(0)?.as_utf8()?;
+        let zone_id = row.get_bytes(1)?.as_utf8()?;
+        let station_name = row.get_bytes(2)?.as_utf8()?;
+        let latitude = row.get_double(3)?;
+        let longitude = row.get_double(4)?;
+        Ok(Self {
+            station_id: station_id.to_owned(),
+            zone_id: zone_id.to_owned(),
+            station_name: station_name.to_owned(),
+            latitude: latitude,
+            longitude: longitude,
+        })
+    }
+}
+
 // stations detail
 // https://api.weather.gov/stations?id=KPVG%2CKCNB&limit=500
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StationRoot {
     #[serde(rename = "@context")]
-    pub context: (String, Context),
+    pub context: Option<(String, Context)>,
     #[serde(rename = "type")]
-    pub type_field: String,
+    pub type_field: Option<String>,
     pub features: Vec<Feature>,
     pub observation_stations: Vec<String>,
     pub pagination: Pagination,

@@ -19,7 +19,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::de::DeserializeOwned;
 use slog::{debug, error, info, Logger};
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, time::Duration, sync::{Arc, Mutex}};
 use std::vec;
 use time::OffsetDateTime;
 use tokio::time::sleep;
@@ -84,6 +84,7 @@ pub async fn load_data(logger: Logger) -> Result<(String, String), Error> {
             forecast_values: item.forecast_values.clone(),
             raw_coordinates: item.raw_coordinates.clone(),
             observation_values: item.observation_values.clone(),
+            station_url: item.station_url.clone()
         })
         .collect();
 
@@ -238,7 +239,8 @@ async fn get_forecast_offices(
         .map(|chunk| chunk.to_vec())
         .collect();
     let mut stations_found: Vec<Station> = vec![];
-    for (index, chunks) in url_chunks.iter().enumerate() {
+    //NOTE: only taking 100 for now
+    for (index, chunks) in url_chunks.iter().take(100).enumerate() {
         info!(logger.clone(), "starting to process chunk {}", index);
         let tasks = chunks.iter().map(|url| {
             let logger = logger.clone();
@@ -311,7 +313,7 @@ fn join_url_param(params: Vec<String>) -> String {
 async fn get_observation(
     logger: Logger,
     stations: Vec<Station>,
-    mut mapping: HashMap<String, Mapping>,
+    mut mappings: HashMap<String, Mapping>,
 ) -> Result<HashMap<String, Mapping>, Error> {
     let station_total = stations.len();
     let step_size = station_total / 10; // 10% progress step size
@@ -331,6 +333,8 @@ async fn get_observation(
         .chunks(chunk_size)
         .map(|chunk| chunk.to_vec())
         .collect();
+
+    let all_updated_mappings = Arc::new(Mutex::new(vec![]));
     for (index, chunks) in url_chunks.iter().enumerate() {
         info!(logger.clone(), "starting to process chunk {}", index);
         let tasks = chunks.iter().map(|url| {
@@ -342,7 +346,7 @@ async fn get_observation(
         });
 
         let tasks_results = join_all(tasks).await;
-        tasks_results.into_iter().for_each(|re| {
+        let updated_mappings: Vec<Mapping> = tasks_results.into_iter().filter_map(|re| {
             let root_res = match re {
                 Ok(res) => match res {
                     Ok(res) => Some(res),
@@ -357,34 +361,35 @@ async fn get_observation(
                 }
             };
             if root_res.is_none() {
-                return;
+                return None;
             }
             let root = root_res.unwrap();
             if root.clone().properties.is_none() {
-                return;
+                return None;
             }
             let properties = root.clone().properties.unwrap();
             let station_url = properties.station.split("/").last();
             if station_url.is_none() {
-                return;
+                return None;
             }
-            let find_mapping = mapping.get_mut(station_url.unwrap().trim());
+            let find_mapping = mappings.get_mut(station_url.unwrap().trim());
             if find_mapping.is_none() {
                 debug!(
                     logger.clone(),
                     "station not found: {}",
                     station_url.unwrap()
                 );
-                return;
+                return None;
             }
             let mapping: &mut Mapping = find_mapping.unwrap();
+            mapping.station_url = station_url.unwrap().trim().to_string();
             if root.geometry.is_none() {
                 debug!(
                     logger.clone(),
                     "station geometry not found: {}",
                     station_url.unwrap()
                 );
-                return;
+                return None;
             }
             let geo = root.geometry.unwrap();
             mapping.raw_coordinates = geo.coordinates.clone();
@@ -395,7 +400,9 @@ async fn get_observation(
             mapping.observation_longitude = long.abs() as u64;
 
             mapping.observation_values = root.properties.unwrap();
-        });
+            Some(mapping.clone())
+        }).collect();
+        all_updated_mappings.lock().unwrap().extend(updated_mappings);
         if index % step_size == 0 {
             let progress = (index as f64 / station_total as f64) * 100.0;
             info!(&logger, "Progress: {:.1}%", progress);
@@ -406,7 +413,12 @@ async fn get_observation(
         sleep(pause_duration).await;
     }
 
-    Ok(mapping)
+    let all_updated = all_updated_mappings.lock().unwrap().iter().fold(HashMap::new(), |mut all_updated, updated_map| {
+        all_updated.insert(updated_map.station_url.to_owned(), updated_map.clone());
+        all_updated
+    });
+
+    Ok(all_updated)
 }
 
 //TODO: fix function to add forecast data to mapping
@@ -416,7 +428,7 @@ async fn get_forecast(
     vals: impl Iterator<Item = &Mapping>,
 ) -> Result<HashMap<String, Mapping>, Error> {
     let station_total = mapping.len();
-    let step_size = station_total / 10; // 10% progress step size
+    let step_size = (station_total % 10) + (station_total / 10); // 10% progress step size
     let urls: Vec<_> = vals
         .enumerate()
         .map(|(index, mapping)| {

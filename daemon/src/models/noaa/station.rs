@@ -13,6 +13,7 @@ pub struct Mapping {
     pub observation_latitude: u64,
     pub observation_longitude: u64,
     pub raw_coordinates: Vec<f64>,
+    pub station_url: String,
     pub forecast_values: ForecastProperties,
     pub observation_values: ObservationProperties,
 }

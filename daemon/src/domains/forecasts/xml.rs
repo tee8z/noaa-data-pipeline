@@ -99,13 +99,19 @@ pub struct Direction {
 pub struct TimeLayout {
     #[serde(rename = "time-coordinate")]
     pub time_coordinate: String,
-    //pub summarization: String,
+    pub summarization: Option<String>,
+    #[serde(rename = "$value")]
+    pub time: Vec<Time>
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub enum Time {
     #[serde(rename = "layout-key")]
-    pub layout_key: String
-    /*#[serde(rename = "start-valid-time")]
-    pub start_valid_time: Vec<String>,
+    LayoutKey(String),
+    #[serde(rename = "start-valid-time")]
+    StartTime(String),
     #[serde(rename = "end-valid-time")]
-    pub end_valid_time: Vec<String>,*/
+    EndTime(String),
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]

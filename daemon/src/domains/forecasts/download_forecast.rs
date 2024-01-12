@@ -53,7 +53,7 @@ pub struct CityForecasts {
 
 
 pub async fn get_forecasts(logger: &Logger, city_weather: CityWeather) -> Result<(),Error> {
-   // let url = get_url(city_weather);
+    let url = get_url(city_weather);
     //println!("url: {}", url);
     let url = "https://graphical.weather.gov/xml/sample_products/browser_interface/ndfdXMLclient.php?listLatLon=36.2,-95.88&product=time-series&begin=2024-01-12T19:19:45.652171155Z&end=2024-01-19T19:19:45.652171155Z&Unit=e&maxt=maxt&mint=mint&wspd=wspd&wdir=wdir&pop12=pop12&qpf=qpf&maxrh=maxrh&minrh=minrh";
     let raw_xml = fetch_xml(logger, &url).await?;

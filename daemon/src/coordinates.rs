@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read, env, fmt};
+use std::{env, fmt, fs::File, io::Read};
 
 use serde::{Deserialize, Serialize};
 
@@ -17,7 +17,6 @@ impl fmt::Display for WeatherStation {
         )
     }
 }
-
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CityWeather {
@@ -41,7 +40,20 @@ impl fmt::Display for CityWeather {
         Ok(())
     }
 }
-
+impl CityWeather {
+    pub fn get_coordinates(&self) -> String {
+        self.city_data
+            .iter()
+            .map(|(_, weather_station)| {
+                format!(
+                    "{},{}",
+                    weather_station.latitude, weather_station.longitude
+                )
+            })
+            .collect::<Vec<String>>()
+            .join("%20")
+    }
+}
 
 pub fn get_coordinates() -> CityWeather {
     let full_path = get_full_path(String::from("./static_data/station_coordinates.json"));
@@ -50,9 +62,9 @@ pub fn get_coordinates() -> CityWeather {
         .expect("Unable to open the file")
         .read_to_string(&mut file_content)
         .expect("Unable to read the file");
-    
+
     serde_json::from_str(&file_content).unwrap()
- }
+}
 
 fn get_full_path(relative_path: String) -> String {
     let mut current_dir = env::current_dir().expect("Failed to get current directory");

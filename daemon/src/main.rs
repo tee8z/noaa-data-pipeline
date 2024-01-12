@@ -1,5 +1,5 @@
 use clap::Parser;
-use daemon::get_coordinates;
+use daemon::{get_coordinates, get_forecasts};
 use slog::{o, Drain, Level, Logger};
 use std::env;
 use tokio;
@@ -18,8 +18,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let logger = setup_logger(&cli);
     let city_weather_coordinates = get_coordinates();
     print!("coordinates: {}", city_weather_coordinates);
-    let week_forecast = get_forecasts(city_weather_coordinates);
-    print!("week_forecast: {}", week_forecast);
+    let week_forecast = get_forecasts(&logger, city_weather_coordinates).await?;
+    //print!("week_forecast: {}", week_forecast);
     //let current_observations = get_observations(city_weather_coordinates);
     //print!("current_observations: {}", current_observations);
     

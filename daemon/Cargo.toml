@@ -14,7 +14,7 @@ slog-term = "2.9.0"
 slog-async = "2.7.0"
 clap = { version = "4.3.23", features = ["derive", "env"] }
 reqwest = {version = "0.11.22", features=["stream", "json"]}
-serde = { version="1.0.188", features= ["derive"]}
+serde = { version="1.0.195", features= ["derive"]}
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7.9"
 serde_json = "1.0.107"
@@ -25,3 +25,4 @@ parquet_derive = "47.0.0"
 time = "0.3.29"
 reqwest-retry = "0.3.0"
 reqwest-middleware = "0.2.3"
+serde-xml-rs = "0.6.0"

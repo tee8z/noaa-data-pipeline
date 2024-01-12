@@ -1,7 +1,7 @@
-mod models;
+mod domains;
 mod parquet_handler;
-mod weather_data;
+mod coordinates;
 
-pub use models::*;
 pub use parquet_handler::*;
-pub use weather_data::*;
+pub use coordinates::*;
+pub use domains::*;

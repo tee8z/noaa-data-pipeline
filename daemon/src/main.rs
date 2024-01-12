@@ -1,5 +1,5 @@
 use clap::Parser;
-use daemon::{load_data, send_parquet_files};
+use daemon::get_coordinates;
 use slog::{o, Drain, Level, Logger};
 use std::env;
 use tokio;
@@ -16,10 +16,16 @@ pub struct Cli {
 async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
     let logger = setup_logger(&cli);
-
+    let city_weather_coordinates = get_coordinates();
+    print!("coordinates: {}", city_weather_coordinates);
+    let week_forecast = get_forecasts(city_weather_coordinates);
+    print!("week_forecast: {}", week_forecast);
+    //let current_observations = get_observations(city_weather_coordinates);
+    //print!("current_observations: {}", current_observations);
+    
     // TODO run these two items in a task that runs every 10 or 20 minutes
-    let file_locations = load_data(logger).await.unwrap();
-    send_parquet_files(file_locations).await?;
+    //let file_locations = load_data(logger).await.unwrap();
+    //send_parquet_files(file_locations).await?;
     Ok(())
 }
 

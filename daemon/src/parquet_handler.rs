@@ -16,58 +16,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
-    create_observation_schema, create_station_schema, models::parquet::Forecast, station, Mapping,
-    Observation, Station,
-};
-
-pub fn save_stations(stations: Vec<Station>, file_name: String) -> String {
-    let full_name = format!("{}.parquet", file_name);
-
-    let file = File::create(full_name.clone()).unwrap();
-    let props = WriterProperties::builder().build();
-    let mut writer =
-        SerializedFileWriter::new(file, Arc::new(create_station_schema()), Arc::new(props))
-            .unwrap();
-
-    let mut row_group = writer.next_row_group().unwrap();
-    stations
-        .as_slice()
-        .write_to_row_group(&mut row_group)
-        .unwrap();
-    row_group.close().unwrap();
-    writer.close().unwrap();
-    full_name
-}
-
-pub fn read_station_file(
-    _logger: Logger,
-    root_path: &str,
-    partial_name: String,
-) -> Result<Vec<Station>, FileError> {
-    let parquet_file_path = get_by_partial_name(root_path, &partial_name)?;
-    let file = std::fs::File::open(parquet_file_path).expect("Failed to open file");
-
-    let reader = SerializedFileReader::new(file).unwrap();
-    let mut rows = reader.get_row_iter(None).unwrap();
-    let mut stations: Vec<Station> = Vec::new();
-    while let Some(record) = rows.next() {
-        //TODO: gracefully handle error
-        let row = record.expect("Failed to read record");
-
-        let station = Station {
-            ..Default::default()
-        };
-        //TODO: gracefully handle error
-        let updated_station = station
-            .from_parquet_row(&row)
-            .expect("Failed to convert Parquet record to struct");
-
-        stations.push(updated_station);
-    }
-    Ok(stations)
-}
-
 #[derive(Debug)]
 pub enum FileError {
     NotFound,
@@ -92,7 +40,7 @@ impl fmt::Display for FileError {
         write!(f, "error: {}", self.to_string())
     }
 }
-
+/*
 fn get_by_partial_name(root_path: &str, search_string: &str) -> Result<String, FileError> {
     let mut matching_files = Vec::new();
 
@@ -235,3 +183,4 @@ fn get_full_path(relative_path: String) -> String {
     // Convert the `PathBuf` to a `String` if needed
     current_dir.to_string_lossy().to_string()
 }
+*/

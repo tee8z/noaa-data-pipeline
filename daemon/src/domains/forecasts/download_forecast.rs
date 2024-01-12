@@ -2,7 +2,7 @@ use std::{fmt, ops::Add};
 
 use anyhow::Error;
 use serde::{Deserialize, Serialize};
-use slog::Logger;
+use slog::{Logger, debug};
 use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime};
 use serde_xml_rs::{from_str};
 use crate::{CityWeather, fetch_xml, Dwml};
@@ -54,14 +54,16 @@ pub struct CityForecasts {
 
 pub async fn get_forecasts(logger: &Logger, city_weather: CityWeather) -> Result<(),Error> {
     let url = get_url(city_weather);
-    //println!("url: {}", url);
+    debug!(logger.clone(), "url: {}", url);
     let url = "https://graphical.weather.gov/xml/sample_products/browser_interface/ndfdXMLclient.php?listLatLon=36.2,-95.88&product=time-series&begin=2024-01-12T19:19:45.652171155Z&end=2024-01-19T19:19:45.652171155Z&Unit=e&maxt=maxt&mint=mint&wspd=wspd&wdir=wdir&pop12=pop12&qpf=qpf&maxrh=maxrh&minrh=minrh";
     let raw_xml = fetch_xml(logger, &url).await?;
-    println!("{}", raw_xml);
+    debug!(logger.clone(), "raw xml: {}", raw_xml);
     let converted_xml: Dwml = serde_xml_rs::from_str(&raw_xml)?;
-    println!("{:?}", converted_xml);
+    debug!(logger.clone(), "converted xml: {:?}", converted_xml);
     Ok(())
 }
+
+
 
 
 fn get_url(city_weather: CityWeather) -> String {

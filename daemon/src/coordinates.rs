@@ -1,6 +1,8 @@
-use std::{env, fmt, fs::File, io::Read};
+use std::{collections::HashSet, fmt, fs::File, io::Read};
 
 use serde::{Deserialize, Serialize};
+
+use crate::get_full_path;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WeatherStation {
@@ -45,17 +47,23 @@ impl CityWeather {
         self.city_data
             .iter()
             .map(|(_, weather_station)| {
-                format!(
-                    "{},{}",
-                    weather_station.latitude, weather_station.longitude
-                )
+                format!("{},{}", weather_station.latitude, weather_station.longitude)
             })
             .collect::<Vec<String>>()
             .join("%20")
     }
+
+    pub fn get_station_ids(&self) -> HashSet<String> {
+        let mut station_ids: HashSet<String> = HashSet::new();
+        self.city_data.iter().for_each(|(_city_name, city_data)| {
+            station_ids.insert(city_data.station_id.clone());
+        });
+        station_ids
+    }
 }
 
 pub fn get_coordinates() -> CityWeather {
+    //TODO: change to pull this list down from https://w1.weather.gov/xml/current_obs/index.xml
     let full_path = get_full_path(String::from("./static_data/station_coordinates.json"));
     let mut file_content = String::new();
     File::open(full_path)
@@ -64,14 +72,4 @@ pub fn get_coordinates() -> CityWeather {
         .expect("Unable to read the file");
 
     serde_json::from_str(&file_content).unwrap()
-}
-
-fn get_full_path(relative_path: String) -> String {
-    let mut current_dir = env::current_dir().expect("Failed to get current directory");
-
-    // Append the relative path to the current working directory
-    current_dir.push(relative_path);
-
-    // Convert the `PathBuf` to a `String` if needed
-    current_dir.to_string_lossy().to_string()
 }

@@ -1,5 +1,5 @@
 pub mod download_forecast;
-pub mod xml;
+pub mod xml_forecast;
 
-pub use xml::*;
+pub use xml_forecast::*;
 pub use download_forecast::*;

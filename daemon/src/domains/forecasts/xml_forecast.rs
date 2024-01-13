@@ -1,107 +1,166 @@
 use serde::{Deserialize, Serialize};
+use time::{OffsetDateTime, macros::format_description};
+use anyhow::{anyhow, Error};
+use crate::TimeRange;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename = "dwml")]
 pub struct Dwml {
     #[serde(rename = "head")]
-    head: Head,
+    pub head: Head,
 
     #[serde(rename = "data")]
-    data: Data,
+    pub data: Data,
 
     #[serde(rename = "version")]
-    version: String,
+    pub version: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Data {
     #[serde(rename = "location")]
-    location: Vec<Location>,
+    pub location: Vec<Location>,
 
     #[serde(rename = "moreWeatherInformation")]
-    more_weather_information: Vec<MoreWeatherInformation>,
+    pub more_weather_information: Vec<MoreWeatherInformation>,
 
     #[serde(rename = "time-layout")]
-    time_layout: Vec<TimeLayout>,
+    pub time_layout: Vec<TimeLayout>,
 
     #[serde(rename = "parameters")]
-    parameters: Vec<Parameter>,
+    pub parameters: Vec<Parameter>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Location {
     #[serde(rename = "location-key")]
-    location_key: String,
+    pub location_key: String,
 
     #[serde(rename = "point")]
-    point: Point,
+    pub point: Point,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Point {
     #[serde(rename = "latitude")]
-    latitude: String,
+    pub latitude: String,
 
     #[serde(rename = "longitude")]
-    longitude: String,
+    pub longitude: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct MoreWeatherInformation {
     #[serde(rename = "applicable-location")]
-    applicable_location: String,
+    pub applicable_location: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Parameter {
     #[serde(rename = "temperature")]
-    temperature: Vec<Direction>,
+    //holds max and min
+    pub temperature: Vec<DataReading>,
 
     #[serde(rename = "precipitation")]
-    precipitation: Direction,
+    pub precipitation: DataReading,
 
     #[serde(rename = "wind-speed")]
-    wind_speed: Direction,
+    pub wind_speed: DataReading,
 
     #[serde(rename = "direction")]
-    direction: Direction,
+    pub wind_direction: DataReading,
 
     #[serde(rename = "probability-of-precipitation")]
-    probability_of_precipitation: Direction,
+    pub probability_of_precipitation: DataReading,
 
     #[serde(rename = "humidity")]
-    humidity: Vec<Direction>,
+    // holds max and min
+    pub humidity: Vec<DataReading>,
 
     #[serde(rename = "applicable-location")]
-    applicable_location: String,
+    pub applicable_location: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct Direction {
+pub struct DataReading {
     #[serde(rename = "name")]
-    name: Name,
+    pub name: Name,
 
     #[serde(rename = "value")]
-    value: Vec<String>,
+    pub value: Vec<String>,
 
     #[serde(rename = "type")]
-    direction_type: Type,
+    pub reading_type: Type,
 
     #[serde(rename = "units")]
-    units: Units,
+    pub units: Units,
 
     #[serde(rename = "time-layout")]
-    time_layout: String,
+    pub time_layout: String,
 }
 
-#[derive(Debug, Deserialize,Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct TimeLayout {
     #[serde(rename = "time-coordinate")]
     pub time_coordinate: String,
     pub summarization: Option<String>,
     #[serde(rename = "$value")]
-    pub time: Vec<Time>
+    pub time: Vec<Time>,
+}
+impl TimeLayout {
+    pub fn to_time_ranges(&self) -> Result<Vec<TimeRange>,Error> {
+        let mut result = Vec::new();
+        let mut current_key = String::new();
+        let mut current_start_time: Option<OffsetDateTime> = None;
+        let description = format_description!("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:2][offset_hour]:[offset_minute]");
+        for item in &self.time {
+            match item {
+                Time::LayoutKey(key) => {
+                    if !current_key.is_empty() {
+                        // If a new key is encountered, add the current TimeRange to the result
+                        if let Some(start_time) = current_start_time {
+                            let time_range = TimeRange {
+                                key: current_key.clone(),
+                                start_time,
+                                end_time: None,
+                            };
+                            result.push(time_range);
+                        }
+                    }
+                    current_key = key.clone();
+                    current_start_time = None;
+                }
+                Time::StartTime(start_time) => {
+                    let current_time = OffsetDateTime::parse(start_time, description).map_err(|e| anyhow!("error parsing time {}", e))?;
+                    current_start_time = Some(current_time);
+                }
+                Time::EndTime(end_time) => {
+                    if let Some(start_time) = current_start_time.take() {
+                        let current_time = OffsetDateTime::parse(end_time, description).map_err(|e| anyhow!("error parsing time {}", e))?;
+                        let time_range = TimeRange {
+                            key: current_key.clone(),
+                            start_time,
+                            end_time: Some(current_time),
+                        };
+                        result.push(time_range);
+                    }
+                }
+            }
+        }
+
+        // If the last key doesn't have an end time, treat it as an ongoing time range
+        if let Some(start_time) = current_start_time {
+            let time_range = TimeRange {
+                key: current_key,
+                start_time,
+                end_time: None,
+            };
+            result.push(time_range);
+        }
+
+        Ok(result)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -117,67 +176,67 @@ pub enum Time {
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Head {
     #[serde(rename = "product")]
-    product: Product,
+    pub product: Product,
 
     #[serde(rename = "source")]
-    source: Source,
+    pub source: Source,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Product {
     #[serde(rename = "title")]
-    title: String,
+    pub title: String,
 
     #[serde(rename = "field")]
-    field: String,
+    pub field: String,
 
     #[serde(rename = "category")]
-    category: String,
+    pub category: String,
 
     #[serde(rename = "creation-date")]
-    creation_date: CreationDate,
+    pub creation_date: CreationDate,
 
     #[serde(rename = "srsName")]
-    srs_name: String,
+    pub srs_name: String,
 
     #[serde(rename = "concise-name")]
-    concise_name: String,
+    pub concise_name: String,
 
     #[serde(rename = "operational-mode")]
-    operational_mode: String,
+    pub operational_mode: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct CreationDate {
     #[serde(rename = "refresh-frequency")]
-    refresh_frequency: String,
+    pub refresh_frequency: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Source {
     #[serde(rename = "more-information")]
-    more_information: String,
+    pub more_information: String,
 
     #[serde(rename = "production-center")]
-    production_center: ProductionCenter,
+    pub production_center: ProductionCenter,
 
     #[serde(rename = "disclaimer")]
-    disclaimer: String,
+    pub disclaimer: String,
 
     #[serde(rename = "credit")]
-    credit: String,
+    pub credit: String,
 
     #[serde(rename = "credit-logo")]
-    credit_logo: String,
+    pub credit_logo: String,
 
     #[serde(rename = "feedback")]
-    feedback: String,
+    pub feedback: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct ProductionCenter {
     #[serde(rename = "sub-center")]
-    sub_center: String,
+    pub sub_center: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]

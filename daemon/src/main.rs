@@ -1,61 +1,37 @@
 use clap::Parser;
-use daemon::{get_coordinates, get_forecasts};
-use slog::{o, Drain, Level, Logger};
-use std::env;
+use daemon::{
+    get_coordinates, get_forecasts, get_observations, save_forecasts, save_observations,
+    send_parquet_files, setup_logger, Cli,
+};
+use time::OffsetDateTime;
 use tokio;
-
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-pub struct Cli {
-    /// Set the log level
-    #[arg(short, long)]
-    level: Option<String>,
-}
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
     let logger = setup_logger(&cli);
+
+    //TODO: put this in a loop that runs once an hour (data updates every 45 minutes after the hour, not sure what timezone though)
     let city_weather_coordinates = get_coordinates();
     print!("coordinates: {}", city_weather_coordinates);
-    let week_forecast = get_forecasts(&logger, city_weather_coordinates).await?;
-    //print!("week_forecast: {}", week_forecast);
-    //let current_observations = get_observations(city_weather_coordinates);
-    //print!("current_observations: {}", current_observations);
-    
-    // TODO run these two items in a task that runs every 10 or 20 minutes
-    //let file_locations = load_data(logger).await.unwrap();
-    //send_parquet_files(file_locations).await?;
+    let forecasts = get_forecasts(&logger, &city_weather_coordinates).await?;
+    let observations = get_observations(&logger, &city_weather_coordinates).await?;
+
+    let current_utc_time: OffsetDateTime = OffsetDateTime::now_utc();
+    let root_path = "./data";
+    let forecast_parquet = save_forecasts(
+        forecasts,
+        root_path,
+        format!("{}_{}", "forecasts", current_utc_time),
+    );
+    let observation_parquet = save_observations(
+        observations,
+        root_path,
+        format!("{}_{}", "observations", current_utc_time),
+    );
+
+    send_parquet_files(observation_parquet, forecast_parquet).await?;
+    // end of loop
+
     Ok(())
-}
-
-fn setup_logger(cli: &Cli) -> Logger {
-    let log_level = if cli.level.is_some() {
-        let level = cli.level.as_ref().unwrap();
-        match level.as_ref() {
-            "trace" => Level::Trace,
-            "debug" => Level::Debug,
-            "info" => Level::Info,
-            "warn" => Level::Warning,
-            "error" => Level::Error,
-            _ => Level::Info,
-        }
-    } else {
-        let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| String::from(""));
-        match rust_log.to_lowercase().as_str() {
-            "trace" => Level::Trace,
-            "debug" => Level::Debug,
-            "info" => Level::Info,
-            "warn" => Level::Warning,
-            "error" => Level::Error,
-            _ => Level::Info,
-        }
-    };
-
-    let decorator = slog_term::TermDecorator::new().build();
-    let drain = slog_term::CompactFormat::new(decorator).build().fuse();
-    let drain = slog_async::Async::new(drain).build().fuse();
-    let drain = drain.filter_level(log_level).fuse();
-    let log = slog::Logger::root(drain, o!("version" => "0.5"));
-    log
 }

@@ -30,4 +30,4 @@
 ### How to use:
 - [Daemon](./daemon/README.md)
 - [Parquet_file_service](./parquet_file_service/README.md)
-- [Browser] (./assets/README.md)
+- [Browser] (./ui/README.md)

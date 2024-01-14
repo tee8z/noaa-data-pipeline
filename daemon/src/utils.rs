@@ -13,7 +13,10 @@ use slog::{debug, o, Drain, Level, Logger};
 pub struct Cli {
     /// Set the log level
     #[arg(short, long)]
-    level: Option<String>,
+    pub level: Option<String>,
+
+    #[arg(short, long)]
+    pub base_url: Option<String>
 }
 
 pub fn setup_logger(cli: &Cli) -> Logger {

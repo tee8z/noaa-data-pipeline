@@ -13,10 +13,10 @@ slog = "2.7.0"
 slog-term = "2.9.0"
 slog-async = "2.7.0"
 clap = { version = "4.3.23", features = ["derive", "env"] }
-reqwest = { version = "0.11.22", features = ["stream", "json"] }
+reqwest = { version = "0.11.22", features = ["stream","multipart", "json"] }
 serde = { version = "1.0.195", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
-tokio-util = "0.7.9"
+tokio-util = { version = "0.7.9",features = ["codec"] }
 serde_json = "1.0.107"
 async-throttle = "0.3.2"
 futures = "0.3.28"

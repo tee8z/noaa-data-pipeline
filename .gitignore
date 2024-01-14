@@ -14,3 +14,4 @@ parquet_file_service/weather_data
 stations.xml
 
 data/
+weather_data/

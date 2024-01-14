@@ -14,3 +14,4 @@ clap = { version = "4.3.23", features = ["derive", "env"] }
 reqwest = {version = "0.11.22", features=["stream"]}
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7.9"
+time = "0.3.31"

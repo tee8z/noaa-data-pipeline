@@ -12,3 +12,6 @@ parquet_file_service/weather_data
 *.pdb
 
 stations.xml
+
+data/
+weather_data/

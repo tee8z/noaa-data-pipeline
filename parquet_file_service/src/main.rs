@@ -1,24 +1,23 @@
 use axum::{
     body::StreamBody,
-    extract::Path,
+    extract::{DefaultBodyLimit, Multipart, Path},
     http::{HeaderValue, Request, StatusCode},
     response::IntoResponse,
     routing::{get, post},
-    BoxError, Json, Router,
+    Json, Router,
 };
-use futures::{Stream, TryStreamExt};
+
 use hyper::{
-    body::Bytes,
     header::{CONTENT_DISPOSITION, CONTENT_TYPE},
     Body, HeaderMap, Method,
 };
 use serde::Serialize;
-use std::{io, net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, str::FromStr};
 use tokio::{
     fs::{self, File},
-    io::BufWriter,
+    io::AsyncWriteExt,
 };
-use tokio_util::io::{ReaderStream, StreamReader};
+use tokio_util::io::ReaderStream;
 use tower_http::{
     cors::{Any, CorsLayer},
     services::{ServeDir, ServeFile},
@@ -27,7 +26,7 @@ use tower_http::{
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let app = app();
-    let listener = SocketAddr::from_str(&"0.0.0.0:9100").unwrap();
+    let listener = SocketAddr::from_str("0.0.0.0:9100").unwrap();
     axum::Server::bind(&listener)
         .serve(app.into_make_service())
         .await?;
@@ -45,7 +44,8 @@ pub fn app() -> Router {
     Router::new()
         .route("/files", get(files)) //TODO: add filtering based on observation vs forecast and time ranges
         .route("/file/:file_name", get(download))
-        .route("/file/:file_name", post(save_request_body))
+        .route("/file/:file_name", post(upload))
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // max is in bytes
         .nest_service("/assets", serve_dir.clone())
         .fallback_service(serve_dir)
         .layer(cors)
@@ -53,7 +53,6 @@ pub fn app() -> Router {
 
 const UPLOADS_DIRECTORY: &str = "weather_data";
 
-//TODO: param for file name (should be download path)
 async fn download(
     Path(filename): Path<String>,
     _request: Request<Body>,
@@ -62,7 +61,7 @@ async fn download(
 
     let file = File::open(file_path)
         .await
-        .map_err(|err| return (StatusCode::NOT_FOUND, format!("File not found: {}", err)))
+        .map_err(|err| (StatusCode::NOT_FOUND, format!("File not found: {}", err)))
         .unwrap();
 
     // convert the `AsyncRead` into a `Stream`
@@ -72,7 +71,7 @@ async fn download(
     let mut headers = HeaderMap::new();
     headers.insert(
         CONTENT_TYPE,
-        HeaderValue::from_str(&"application/parquet").unwrap(),
+        HeaderValue::from_str("application/parquet").unwrap(),
     );
     headers.insert(
         CONTENT_DISPOSITION,
@@ -107,45 +106,29 @@ async fn grab_file_names() -> Vec<String> {
     files_names
 }
 
-// POST'ing to `/file/foo.txt` will create a file called `foo.txt`.
-async fn save_request_body(
+async fn upload(
     Path(file_name): Path<String>,
-    request: Request<Body>,
+    mut multipart: Multipart,
 ) -> Result<(), (StatusCode, String)> {
-    stream_to_file(&file_name, request.into_body()).await
-}
-
-// Save a `Stream` to a file
-async fn stream_to_file<S, E>(path: &str, stream: S) -> Result<(), (StatusCode, String)>
-where
-    S: Stream<Item = Result<Bytes, E>>,
-    E: Into<BoxError>,
-{
-    if !path_is_valid(path) {
+    if !path_is_valid(&file_name) {
         return Err((StatusCode::BAD_REQUEST, "Invalid file".to_owned()));
     }
+    while let Some(field) = multipart.next_field().await.unwrap() {
+        let name = field.name().unwrap().to_string();
+        let data = field.bytes().await.unwrap();
 
-    async {
-        // Convert the stream into an `AsyncRead`.
-        let body_with_io_error = stream.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
-        let body_reader = StreamReader::new(body_with_io_error);
-        futures::pin_mut!(body_reader);
-
-        // Create the file. `File` implements `AsyncWrite`.
-        let path = std::path::Path::new(UPLOADS_DIRECTORY).join(path);
-        let mut file = BufWriter::new(File::create(path).await?);
-
-        // Copy the body into the file.
-        tokio::io::copy(&mut body_reader, &mut file).await?;
-
-        Ok::<_, io::Error>(())
+        println!("Length of `{}` is {} bytes", name, data.len());
+        let path = std::path::Path::new(UPLOADS_DIRECTORY).join(&file_name);
+        // Create a new file and write the data to it
+        let mut file = File::create(&path).await.expect("Failed to create file");
+        file.write_all(&data)
+            .await
+            .expect("Failed to write to file");
     }
-    .await
-    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+    Ok(())
 }
 
-// to prevent directory traversal attacks we ensure the path consists of exactly one normal
-// component
+// to prevent directory traversal attacks we ensure the path consists of exactly one normal component
 fn path_is_valid(path: &str) -> bool {
     let path = std::path::Path::new(path);
 

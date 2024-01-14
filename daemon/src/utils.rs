@@ -1,14 +1,18 @@
-use std::{env, fs::File, io::Write};
-
 use anyhow::{anyhow, Error};
 use clap::Parser;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
-use slog::{debug, o, Drain, Level, Logger};
+use slog::{debug, error, info, o, Drain, Level, Logger};
+use std::{
+    env,
+    fs::{self, File},
+    io::Write,
+    path::Path,
+};
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
     /// Set the log level
@@ -16,7 +20,7 @@ pub struct Cli {
     pub level: Option<String>,
 
     #[arg(short, long)]
-    pub base_url: Option<String>
+    pub base_url: Option<String>,
 }
 
 pub fn setup_logger(cli: &Cli) -> Logger {
@@ -103,4 +107,20 @@ pub fn get_full_path(relative_path: String) -> String {
 
     // Convert the `PathBuf` to a `String` if needed
     current_dir.to_string_lossy().to_string()
+}
+
+pub fn create_folder(root_path: &str, logger: &Logger) {
+    let path = Path::new(root_path);
+
+    if !path.exists() || !path.is_dir() {
+        // Create the folder if it doesn't exist
+        if let Err(err) = fs::create_dir(path) {
+            error!(logger, "Error creating folder: {}", err);
+            // Handle the error as needed
+        } else {
+            info!(logger, "Folder created: {}", root_path);
+        }
+    } else {
+        info!(logger, "Folder already exists: {}", root_path);
+    }
 }

@@ -1,9 +1,7 @@
-use std::{
-    fmt::{self, Display},
-};
 use crate::TimeRange;
 use anyhow::{anyhow, Error};
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display};
 use time::{macros::format_description, OffsetDateTime};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -119,37 +117,37 @@ impl TimeLayout {
         let description = format_description!(
             "[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour]:[offset_minute]"
         );
-        let mut result = self
-            .time
-            .iter()
-            .fold(vec![], |mut time_ranges: Vec<TimeRange>, current_time| {
-                match current_time {
-                    Time::LayoutKey(key) => time_ranges.push(TimeRange {
-                        key: key.to_string(),
-                        start_time: OffsetDateTime::UNIX_EPOCH,
-                        end_time: None,
-                    }),
-                    Time::StartTime(start_time) => {
-                        let current_time = OffsetDateTime::parse(start_time, description)
-                            .map_err(|e| anyhow!("error parsing time start time: {}", e))
-                            .unwrap();
-                        let previous = time_ranges.last().unwrap();
-                        time_ranges.push(TimeRange {
-                            key: previous.key.clone(),
-                            start_time: current_time,
+        let mut result =
+            self.time
+                .iter()
+                .fold(vec![], |mut time_ranges: Vec<TimeRange>, current_time| {
+                    match current_time {
+                        Time::LayoutKey(key) => time_ranges.push(TimeRange {
+                            key: key.to_string(),
+                            start_time: OffsetDateTime::UNIX_EPOCH,
                             end_time: None,
-                        })
+                        }),
+                        Time::StartTime(start_time) => {
+                            let current_time = OffsetDateTime::parse(start_time, description)
+                                .map_err(|e| anyhow!("error parsing time start time: {}", e))
+                                .unwrap();
+                            let previous = time_ranges.last().unwrap();
+                            time_ranges.push(TimeRange {
+                                key: previous.key.clone(),
+                                start_time: current_time,
+                                end_time: None,
+                            })
+                        }
+                        Time::EndTime(end_time) => {
+                            let current_time = OffsetDateTime::parse(end_time, description)
+                                .map_err(|e| anyhow!("error parsing end time: {}", e))
+                                .unwrap();
+                            let previous = time_ranges.last_mut().unwrap();
+                            previous.end_time = Some(current_time);
+                        }
                     }
-                    Time::EndTime(end_time) => {
-                        let current_time = OffsetDateTime::parse(end_time, description)
-                            .map_err(|e| anyhow!("error parsing end time: {}", e))
-                            .unwrap();
-                        let previous = time_ranges.last_mut().unwrap();
-                        previous.end_time = Some(current_time);
-                    }
-                }
-                time_ranges
-            });
+                    time_ranges
+                });
         result.retain(|time_range| time_range.start_time != OffsetDateTime::UNIX_EPOCH);
         println!("time_ranges: {:?}", result);
         Ok(result.clone())

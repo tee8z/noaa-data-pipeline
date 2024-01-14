@@ -5,10 +5,7 @@ use parquet::{
     file::{properties::WriterProperties, writer::SerializedFileWriter},
     record::RecordWriter,
 };
-use reqwest::{
-    multipart,
-    Body, Client,
-};
+use reqwest::{multipart, Body, Client};
 use tokio::fs::File as TokioFile;
 use tokio_util::codec::{BytesCodec, FramedRead};
 

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Error};
 use parquet::{
-    basic::{Repetition, Type as PhysicalType, LogicalType},
+    basic::{LogicalType, Repetition, Type as PhysicalType},
     schema::types::Type,
 };
 use parquet_derive::ParquetRecordWriter;
@@ -46,9 +46,9 @@ impl TryFrom<CurrentObservation> for CurrentWeather {
             temperature_value: val.temp_f.parse::<f64>()?,
             temperature_unit_code: Units::Fahrenheit.to_string(),
             relative_humidity: val.relative_humidity.parse::<i64>()?,
-            relative_humidity_unit_code:Units::Percent.to_string(),
+            relative_humidity_unit_code: Units::Percent.to_string(),
             wind_direction: val.wind_degrees.parse::<i64>()?,
-            wind_direction_unit_code:Units::DegreesTrue.to_string(),
+            wind_direction_unit_code: Units::DegreesTrue.to_string(),
             wind_speed: val.wind_kt.parse::<i64>()?,
             wind_speed_unit_code: Units::Knots.to_string(),
             dewpoint_value: val.dewpoint_f.parse::<f64>()?,
@@ -60,6 +60,7 @@ impl TryFrom<CurrentObservation> for CurrentWeather {
 #[derive(Debug, ParquetRecordWriter)]
 pub struct Observation {
     pub station_id: String,
+    pub station_name: String,
     pub latitude: f64,
     pub longitude: f64,
     pub generated_at: String,
@@ -82,6 +83,7 @@ impl TryFrom<CurrentWeather> for Observation {
             format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]Z");
         let parquet = Observation {
             station_id: val.station_id,
+            station_name: String::from(""),
             latitude: val.latitude,
             longitude: val.longitude,
             generated_at: val
@@ -105,6 +107,12 @@ impl TryFrom<CurrentWeather> for Observation {
 
 pub fn create_observation_schema() -> Type {
     let station_id = Type::primitive_type_builder("station_id", PhysicalType::BYTE_ARRAY)
+        .with_repetition(Repetition::REQUIRED)
+        .with_logical_type(Some(LogicalType::String))
+        .build()
+        .unwrap();
+
+    let station_name = Type::primitive_type_builder("station_name", PhysicalType::BYTE_ARRAY)
         .with_repetition(Repetition::REQUIRED)
         .with_logical_type(Some(LogicalType::String))
         .build()
@@ -189,6 +197,7 @@ pub fn create_observation_schema() -> Type {
     let schema = Type::group_type_builder("observation")
         .with_fields(vec![
             Arc::new(station_id),
+            Arc::new(station_name),
             Arc::new(latitude),
             Arc::new(longitude),
             Arc::new(generated_at),
@@ -221,7 +230,9 @@ pub async fn get_observations(
     let mut observations = vec![];
     for value in current_weather.values() {
         let current = value.clone();
-        let observation: Observation = current.try_into()?;
+        let mut observation: Observation = current.try_into()?;
+        let city = city_weather.city_data.get(&observation.station_id).unwrap();
+        observation.station_name = city.station_name.clone();
         observations.push(observation)
     }
     Ok(observations)

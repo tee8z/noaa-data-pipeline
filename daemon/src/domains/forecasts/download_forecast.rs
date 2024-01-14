@@ -2,18 +2,24 @@ use crate::Type::{
     Liquid, Maximum, MaximumRelative, Minimum, MinimumRelative,
     ProbabilityOfPrecipitationWithin12Hours, Sustained, Wind,
 };
-use crate::{fetch_xml, CityWeather, DataReading, Dwml, Location, Units};
+use crate::{
+    fetch_xml, CityWeather, DataReading, Dwml, Location, Units, WeatherStation, split_cityweather,
+};
 use anyhow::{anyhow, Error};
+use core::time::Duration as StdDuration;
 use parquet::basic::LogicalType;
 use parquet::{
     basic::{Repetition, Type as PhysicalType},
     schema::types::Type,
 };
 use parquet_derive::ParquetRecordWriter;
-use slog::{debug, Logger};
+use serde_xml_rs::from_str;
+use slog::{debug, error, Logger};
 use std::sync::Arc;
 use std::{collections::HashMap, ops::Add};
 use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime};
+use tokio::sync::mpsc;
+use tokio::time::sleep;
 /*
 More Options defined  here:
 TODO: pull list down from the website and request everything
@@ -31,6 +37,7 @@ Minimum Relative Humidity 	minrh
 #[derive(Debug, Clone)]
 pub struct WeatherForecast {
     pub station_id: String,
+    pub station_name: String,
     pub latitude: String,
     pub longitude: String,
     pub generated_at: OffsetDateTime,
@@ -55,6 +62,7 @@ pub struct WeatherForecast {
 #[derive(ParquetRecordWriter, Debug)]
 pub struct Forecast {
     pub station_id: String,
+    pub station_name: String,
     pub latitude: f64,
     pub longitude: f64,
     pub generated_at: String,
@@ -81,6 +89,7 @@ impl TryFrom<WeatherForecast> for Forecast {
     fn try_from(val: WeatherForecast) -> Result<Self, Self::Error> {
         let parquet = Forecast {
             station_id: val.station_id,
+            station_name: String::from(""),
             latitude: val.latitude.parse::<f64>()?,
             longitude: val.longitude.parse::<f64>()?,
             generated_at: val
@@ -119,6 +128,12 @@ pub fn create_forecast_schema() -> Type {
     let station_id = Type::primitive_type_builder("station_id", PhysicalType::BYTE_ARRAY)
         .with_logical_type(Some(LogicalType::String))
         .with_repetition(Repetition::REQUIRED)
+        .build()
+        .unwrap();
+
+    let station_name = Type::primitive_type_builder("station_name", PhysicalType::BYTE_ARRAY)
+        .with_repetition(Repetition::REQUIRED)
+        .with_logical_type(Some(LogicalType::String))
         .build()
         .unwrap();
 
@@ -243,6 +258,7 @@ pub fn create_forecast_schema() -> Type {
     let schema = Type::group_type_builder("forecast")
         .with_fields(vec![
             Arc::new(station_id),
+            Arc::new(station_name),
             Arc::new(latitude),
             Arc::new(longitude),
             Arc::new(generated_at),
@@ -454,39 +470,91 @@ fn add_data(
     Ok(())
 }
 
+pub async fn fetch_forecast_with_retry(
+    logger: &Logger,
+    tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>>,
+    url: &str,
+    max_retries: usize,
+    city_weather: &CityWeather,
+) {
+    let mut retries = 0;
+    loop {
+        match fetch_xml(logger, url).await {
+            Ok(xml) => {
+                let converted_xml: Dwml = from_str(&xml).unwrap(); // You might want to handle errors here
+                let weather_with_stations = add_station_ids(city_weather, converted_xml);
+                let current_forecast_data: HashMap<String, Vec<WeatherForecast>> =
+                    weather_with_stations.try_into().unwrap(); // You might want to handle errors here
+
+                // Send the result through the channel
+                if let Err(err) = tx.send(Ok(current_forecast_data)).await {
+                    error!(logger, "Error sending result through channel: {}", err);
+                }
+
+                break;
+            }
+            Err(err) => {
+                if retries >= max_retries {
+                    // Send the error through the channel
+                    if let Err(err) = tx.send(Err(err)).await {
+                        error!(logger, "Error sending error through channel: {}", err);
+                    }
+
+                    break;
+                }
+                retries += 1;
+                // Log the error and retry after a delay
+                error!(logger, "Error fetching XML (retry {}): {}", retries, err);
+                sleep(StdDuration::from_secs(5)).await;
+            }
+        }
+    }
+}
+
 pub async fn get_forecasts(
     logger: &Logger,
     city_weather: &CityWeather,
 ) -> Result<Vec<Forecast>, Error> {
-    let mut forecast_data: HashMap<String, Vec<WeatherForecast>> = HashMap::new();
+    let split_maps = split_cityweather(city_weather.clone(), 50);
 
-    //TODO: call 200 stations at a time, max allowed
-    let url = get_url(city_weather);
-    let raw_xml = fetch_xml(logger, &url).await?;
-    debug!(logger.clone(), "raw xml: {}", raw_xml);
+    let (tx, mut rx) =
+        mpsc::channel::<Result<HashMap<String, Vec<WeatherForecast>>, Error>>(split_maps.len());
 
-    let converted_xml: Dwml = serde_xml_rs::from_str(&raw_xml)?;
-    let weather_with_stations = add_station_ids(city_weather, converted_xml);
-    debug!(logger.clone(), "converted xml: {:?}", weather_with_stations);
+    let max_retries = 3;
+    for city_weather in split_maps {
+        let logger = logger.clone();
+        let tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>> = tx.clone();
+        let url = get_url(&city_weather);
+        let max_retries = max_retries;
 
-    let current_forecast_data: HashMap<String, Vec<WeatherForecast>> =
-        weather_with_stations.try_into()?;
+        tokio::spawn(async move {
+            // Adding a sleep here to reduce rate limiting by their service
+            sleep(StdDuration::from_secs(2)).await;
+            fetch_forecast_with_retry(&logger, tx, &url, max_retries, &city_weather).await;
+        });
+    }
 
-    debug!(
-        logger.clone(),
-        "current_forecast_data: {:?}", current_forecast_data
-    );
-
-    //TODO: add each 200 parsed data into the HashMap (should be keyed on station_id and then a list of each weather reading per day)
-    forecast_data.extend(current_forecast_data);
+    let mut forecast_data = HashMap::new();
+    while let Some(result) = rx.recv().await {
+        match result {
+            Ok(data) => {
+                forecast_data.extend(data);
+            }
+            Err(err) => {
+                eprintln!("Error fetching forecast data: {}", err);
+            }
+        }
+    }
 
     let mut forecasts = vec![];
     for all_forecasts in forecast_data.values() {
         for weather_forecats in all_forecasts {
             let current = weather_forecats.clone();
             debug!(logger.clone(), "current weather forecast: {:?}", current);
-            let forecast: Forecast = current.try_into()?;
+            let mut forecast: Forecast = current.try_into()?;
             debug!(logger.clone(), "parquet format forecast: {:?}", forecast);
+            let city = city_weather.city_data.get(&forecast.station_id).unwrap();
+            forecast.station_name = city.station_name.clone();
             forecasts.push(forecast)
         }
     }
@@ -505,8 +573,8 @@ fn get_forecasts_ranges(
         .map(|(_, time_ranges)| time_ranges.first().unwrap().start_time)
         .collect();
 
-    first_start_time_only.sort_by(|a, b| a.cmp(&b));
-    let first_time = first_start_time_only.first().unwrap().clone();
+    first_start_time_only.sort();
+    let first_time = *first_start_time_only.first().unwrap();
 
     let mut last_start_time_only: Vec<OffsetDateTime> = time_layouts
         .iter()
@@ -514,10 +582,9 @@ fn get_forecasts_ranges(
         .map(|(_, time_ranges)| time_ranges.last().unwrap().start_time)
         .collect();
 
-    last_start_time_only.sort_by(|a, b| a.cmp(&b));
-    let last_time = last_start_time_only.last().unwrap().clone();
-    println!("first_time: {:?}", first_time);
-    println!("last_time: {:?}", last_time);
+    last_start_time_only.sort();
+    let last_time = *last_start_time_only.last().unwrap();
+
     let time_window = TimeWindow {
         first_time,
         last_time,
@@ -531,6 +598,7 @@ fn get_forecasts_ranges(
 
         let weather_forecast = WeatherForecast {
             station_id: location.station_id.clone().unwrap_or_default(),
+            station_name: String::from(""),
             latitude: location.point.latitude.clone(),
             longitude: location.point.longitude.clone(),
             generated_at,
@@ -574,12 +642,7 @@ fn add_station_ids(city_weather: &CityWeather, mut converted_xml: Dwml) -> Dwml 
                 .city_data
                 .clone()
                 .values()
-                // xml files always provide these to 2 decimal places, make sure to match on that percision
-                .find(|val| {
-                    val.latitude.parse::<f64>().unwrap() == latitude.parse::<f64>().unwrap()
-                        && val.longitude.parse::<f64>().unwrap()
-                            == longitude.parse::<f64>().unwrap()
-                })
+                .find(|val| compare_coordinates(val, &latitude, &longitude))
                 .map(|val| val.station_id.clone());
 
             Location {
@@ -590,6 +653,14 @@ fn add_station_ids(city_weather: &CityWeather, mut converted_xml: Dwml) -> Dwml 
         })
         .collect();
     converted_xml
+}
+
+// forecast xml files always provide these to 2 decimal places, make sure to match on that percision
+fn compare_coordinates(weather_station: &WeatherStation, latitude: &str, longitude: &str) -> bool {
+    let station_lat = weather_station.get_latitude();
+    let station_long = weather_station.get_longitude();
+
+    station_lat == latitude && station_long == longitude
 }
 
 fn get_url(city_weather: &CityWeather) -> String {

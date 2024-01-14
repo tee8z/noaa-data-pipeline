@@ -13,7 +13,10 @@
     <script type="module">
         import duckdbduckdbWasm from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.27.1-dev125.0/+esm';
     </script>
-    <script type="module" src="main.js"></script>
+    <script>
+        const API_BASE = "{SERVER_ADDRESS}";
+    </script>
+    <script type="module" src="/assets/main.js"></script>
     <section class="section">
         <div class="container">
             <h1 class="title">
@@ -22,7 +25,7 @@
             <div class="dropdown is-active">
                 <div class="dropdown-trigger">
                     <button class="button" aria-haspopup="true" aria-controls="dropdown-menu">
-                  <span>Dropdown button</span>
+                  <span>Select Files to download</span>
                   <span class="icon is-small">
                     <i class="fas fa-angle-down" aria-hidden="true"></i>
                   </span>

@@ -2,7 +2,7 @@ use axum::{
     body::StreamBody,
     extract::{DefaultBodyLimit, Multipart, Path},
     http::{HeaderValue, Request, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Html},
     routing::{get, post},
     Json, Router,
 };
@@ -12,7 +12,7 @@ use hyper::{
     Body, HeaderMap, Method,
 };
 use serde::Serialize;
-use std::{net::SocketAddr, str::FromStr};
+use std::net::SocketAddr;
 use tokio::{
     fs::{self, File},
     io::AsyncWriteExt,
@@ -25,14 +25,27 @@ use tower_http::{
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let app = app();
-    let listener = SocketAddr::from_str("0.0.0.0:9100").unwrap();
-    axum::Server::bind(&listener)
+    let address = SocketAddr::from(([127, 0, 0, 1], 9100));
+    println!("listening on http://{}", address);
+    let app = app(address.to_string());
+    axum::Server::bind(&address)
         .serve(app.into_make_service())
         .await?;
     Ok(())
 }
-pub fn app() -> Router {
+
+async fn index(server_address: String) -> String  {
+    let file_content = fs::read_to_string("./assets/index.html").await.expect("Unable to read index.html");
+    let updated_content = file_content.replace("{SERVER_ADDRESS}", &format!("http://{}",server_address));
+
+    updated_content
+}
+
+async fn index_handler(server_address: String) -> Html<String> {
+   Html(index(server_address.clone()).await)
+}
+
+pub fn app(server_address: String) -> Router {
     let cors = CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])
@@ -47,7 +60,8 @@ pub fn app() -> Router {
         .route("/file/:file_name", get(download))
         .route("/file/:file_name", post(upload))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // max is in bytes
-        .nest_service("/", serve_dir.clone())
+        .route("/", get(move || index_handler(server_address.clone())))
+        .nest_service("/assets", serve_dir.clone())
         .fallback_service(serve_dir)
         .layer(cors)
 }

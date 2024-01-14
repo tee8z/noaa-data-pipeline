@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noaa data visualizer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+
+<body>
+    <script>
+        const API_BASE = "{SERVER_ADDRESS}";
+    </script>
+    <script type="module" src="/ui/main.js"></script>
+    <section class="section">
+        <div class="container">
+            <h1 class="title">
+                NOAA Forecast and Observation Data Analyzer
+            </h1>
+            <div class="field is-grouped">
+                <div class="control">
+                    <div class="dropdown" id="dropdown">
+                        <div class="dropdown-trigger">
+                            <button id="openDropDown" class="button" aria-haspopup="true" aria-controls="dropdown-menu">
+                                <span>Select Files to download</span>
+                                <span class="icon is-small">
+                                    <i class="fas fa-angle-down" aria-hidden="true"></i>
+                                </span>
+                            </button>
+                        </div>
+                        <div class="dropdown-menu" id="dropdown-menu" role="menu">
+                            <div class="dropdown-content" id="dropdown-content">
+                                <!-- Dropdown items will be dynamically added here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="control">
+                    <button id="submit" class="button is-primary"><span>Download Files</span></button>
+                </div>
+            </div>
+            <div>
+                <h4>Schemas of the files</h4>
+                <div class="feild">
+                    <pre id="forecasts-schema"></pre>
+                </div>
+                <div class="feild">
+                    <pre id="observations-schema"></pre>
+                </div>
+            </div>
+            <div class="field">
+                <label class="label">Custom Query</label>
+                <div class="control">
+                    <textarea id="customQuery" class="textarea" placeholder="place custom query here"></textarea>
+                </div>
+                <h4>Learn how to make queries from: <a href="https://duckdb.org/docs/sql/introduction" target="_blank"><span>Query Docs</span></a></h4>
+            </div>
+            <div class="field is-grouped">
+                <div class="control">
+                    <button id="runQuery" class="button is-info"><span>Run</span></button>
+                </div>
+                <div class="control">
+                    <button id="clearQuery" class="button is-warning"><span>Clear</span></button>
+                </div>
+            </div>
+            <div class="table-container" id="queryResult-container">
+                <!-- Custom Query Results will be dynamically added here on download -->
+            </div>
+        </div>
+        </div>
+    </section>
+</body>
+
+</html>

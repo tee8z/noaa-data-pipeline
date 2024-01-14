@@ -50,5 +50,5 @@ curl -H "Content-Type: multipart/form-data" -F "file=@/home/tee8z/repos/noaa-dat
 ```
 
 ### The service expects the following folders in the working directory path (where the binary is running)
-- `./assets`
+- `./ui`
 - `./weather_data`

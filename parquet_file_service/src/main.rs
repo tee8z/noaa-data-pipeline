@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn index(server_address: String) -> String  {
-    let file_content = fs::read_to_string("./assets/index.html").await.expect("Unable to read index.html");
+    let file_content = fs::read_to_string("./ui/index.html").await.expect("Unable to read index.html");
     let updated_content = file_content.replace("{SERVER_ADDRESS}", &format!("http://{}",server_address));
 
     updated_content
@@ -52,8 +52,8 @@ pub fn app(server_address: String) -> Router {
         // allow requests from any origin
         .allow_origin(Any);
 
-    // The assets folder needs to be generated and have this relative path from where the binary is being run
-    let serve_dir = ServeDir::new("assets").not_found_service(ServeFile::new("assets/index.html"));
+    // The ui folder needs to be generated and have this relative path from where the binary is being run
+    let serve_dir = ServeDir::new("ui").not_found_service(ServeFile::new("ui/index.html"));
 
     Router::new()
         .route("/files", get(files)) //TODO: add filtering based on observation vs forecast and time ranges
@@ -61,7 +61,7 @@ pub fn app(server_address: String) -> Router {
         .route("/file/:file_name", post(upload))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // max is in bytes
         .route("/", get(move || index_handler(server_address.clone())))
-        .nest_service("/assets", serve_dir.clone())
+        .nest_service("/ui", serve_dir.clone())
         .fallback_service(serve_dir)
         .layer(cors)
 }

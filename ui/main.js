@@ -142,7 +142,7 @@ async function runQuery(event) {
         loadTable("queryResult", queryResult);
         await conn.close();
     } catch (error) {
-        console.error('Error running query:', error);
+        displayQueryErr(error);
     }
 }
 
@@ -165,10 +165,9 @@ function loadSchema(tableName, queryResult) {
 }
 
 function loadTable(tableName, queryResult) {
+    deleteErr();
     deleteTable(tableName);
-    console.log(tableName);
     const tableParentDiv = document.getElementById(`${tableName}-container`);
-    console.log(tableParentDiv);
     const table = document.createElement("table");
     table.classList.add("table");
     table.classList.add("is-striped");
@@ -209,6 +208,32 @@ function loadTable(tableName, queryResult) {
     }
 }
 
+function displayQueryErr(err) {
+    console.error(err);
+    const parentElement = document.getElementById(`queryResult-container`);
+    deleteErr();
+    const errorDiv = document.createElement("div");
+    errorDiv.id = 'error'
+    errorDiv.innerText = err;
+    errorDiv.classList.add("notification");
+    errorDiv.classList.add("is-danger");
+    errorDiv.classList.add("is-light");
+
+    parentElement.appendChild(errorDiv);
+}
+
+function deleteErr() {
+    const parentElement = document.getElementById(`queryResult-container`);
+    const childElement = document.getElementById('error');
+
+    // Check if the parent and child elements exist
+    if (parentElement && childElement) {
+        console.log("deleting from dom");
+        // Remove the child element from the parent
+        parentElement.removeChild(childElement);
+    }
+}
+
 function getArrayType(arr) {
     if (arr instanceof Uint8Array) {
         return 'Uint8Array';
@@ -243,7 +268,9 @@ function convertUintArrayToStrings(uint8Array, valueOffsets) {
         const end = valueOffsets[i];
         const stringBytes = uint8Array.subarray(start, end);
         const decodedString = textDecoder.decode(stringBytes);
-        decodedStrings.push(decodedString);
+        if (decodedString.length != 0) {
+            decodedStrings.push(decodedString);
+        }
     }
 
     console.log(decodedStrings);
@@ -252,8 +279,7 @@ function convertUintArrayToStrings(uint8Array, valueOffsets) {
 
 function clearQuerys(event) {
     deleteTable('queryResult');
-    deleteTable('observations');
-    deleteTable('forecasts');
+    deleteErr();
 }
 
 function deleteTable(tableName) {
@@ -269,5 +295,6 @@ function deleteTable(tableName) {
         parentElement.removeChild(childElement);
     }
 }
+
 
 //TODO: add export to file ability from the tables

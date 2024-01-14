@@ -1,5 +1,13 @@
 ## A simple system showing how to create a data pipeline from NOAA
 
+### Example of using the UI:
+
+![Initial Screen](ui_demo/ksnip_20240114-151717.png)
+![Select Files](ui_demo/ksnip_20240114-151738.png)
+![View File Schemas](ui_demo/ksnip_20240114-151818.png)
+![Enter Bad Query](ui_demo/ksnip_20240114-153740.png)
+![Enter Good Query](ui_demo/ksnip_20240114-154002.png)
+
 ### Where data comes from:
 - Info on where the data used to generate the parquet files comes from:
     - Observations: https://w1.weather.gov/xml/current_obs/all_xml.zip
@@ -30,4 +38,4 @@
 ### How to use:
 - [Daemon](./daemon/README.md)
 - [Parquet_file_service](./parquet_file_service/README.md)
-- [Browser] (./ui/README.md)
+- [Browser](./ui/README.md)

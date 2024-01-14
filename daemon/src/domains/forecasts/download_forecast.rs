@@ -4,8 +4,9 @@ use crate::Type::{
 };
 use crate::{fetch_xml, CityWeather, DataReading, Dwml, Location, Units};
 use anyhow::{anyhow, Error};
+use parquet::basic::LogicalType;
 use parquet::{
-    basic::{ConvertedType, Repetition, Type as PhysicalType},
+    basic::{Repetition, Type as PhysicalType},
     schema::types::Type,
 };
 use parquet_derive::ParquetRecordWriter;
@@ -116,7 +117,7 @@ impl TryFrom<WeatherForecast> for Forecast {
 
 pub fn create_forecast_schema() -> Type {
     let station_id = Type::primitive_type_builder("station_id", PhysicalType::BYTE_ARRAY)
-        .with_converted_type(ConvertedType::UTF8)
+        .with_logical_type(Some(LogicalType::String))
         .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
@@ -132,19 +133,19 @@ pub fn create_forecast_schema() -> Type {
         .unwrap();
 
     let generated_at = Type::primitive_type_builder("generated_at", PhysicalType::BYTE_ARRAY)
-        .with_converted_type(ConvertedType::UTF8)
+        .with_logical_type(Some(LogicalType::String))
         .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
 
     let begin_time = Type::primitive_type_builder("begin_time", PhysicalType::BYTE_ARRAY)
-        .with_converted_type(ConvertedType::UTF8)
+        .with_logical_type(Some(LogicalType::String))
         .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
 
     let end_time = Type::primitive_type_builder("end_time", PhysicalType::BYTE_ARRAY)
-        .with_converted_type(ConvertedType::UTF8)
+        .with_logical_type(Some(LogicalType::String))
         .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
@@ -161,7 +162,7 @@ pub fn create_forecast_schema() -> Type {
 
     let temperature_unit_code =
         Type::primitive_type_builder("temperature_unit_code", PhysicalType::BYTE_ARRAY)
-            .with_converted_type(ConvertedType::UTF8)
+            .with_logical_type(Some(LogicalType::String))
             .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
@@ -173,7 +174,7 @@ pub fn create_forecast_schema() -> Type {
 
     let wind_speed_unit_code =
         Type::primitive_type_builder("wind_speed_unit_code", PhysicalType::BYTE_ARRAY)
-            .with_converted_type(ConvertedType::UTF8)
+            .with_logical_type(Some(LogicalType::String))
             .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
@@ -185,7 +186,7 @@ pub fn create_forecast_schema() -> Type {
 
     let wind_direction_unit_code =
         Type::primitive_type_builder("wind_direction_unit_code", PhysicalType::BYTE_ARRAY)
-            .with_converted_type(ConvertedType::UTF8)
+            .with_logical_type(Some(LogicalType::String))
             .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
@@ -204,7 +205,7 @@ pub fn create_forecast_schema() -> Type {
 
     let relative_humidity_unit_code =
         Type::primitive_type_builder("relative_humidity_unit_code", PhysicalType::BYTE_ARRAY)
-            .with_converted_type(ConvertedType::UTF8)
+            .with_logical_type(Some(LogicalType::String))
             .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
@@ -217,7 +218,7 @@ pub fn create_forecast_schema() -> Type {
 
     let liquid_precipitation_unit_code =
         Type::primitive_type_builder("liquid_precipitation_unit_code", PhysicalType::BYTE_ARRAY)
-            .with_converted_type(ConvertedType::UTF8)
+            .with_logical_type(Some(LogicalType::String))
             .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
@@ -234,7 +235,7 @@ pub fn create_forecast_schema() -> Type {
         "twelve_hour_probability_of_precipitation_unit_code",
         PhysicalType::BYTE_ARRAY,
     )
-    .with_converted_type(ConvertedType::UTF8)
+    .with_logical_type(Some(LogicalType::String))
     .with_repetition(Repetition::REQUIRED)
     .build()
     .unwrap();

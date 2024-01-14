@@ -39,6 +39,7 @@ pub fn app() -> Router {
         // allow requests from any origin
         .allow_origin(Any);
 
+    // The assets folder needs to be generated and have this relative path from where the binary is being run
     let serve_dir = ServeDir::new("assets").not_found_service(ServeFile::new("assets/index.html"));
 
     Router::new()
@@ -46,7 +47,7 @@ pub fn app() -> Router {
         .route("/file/:file_name", get(download))
         .route("/file/:file_name", post(upload))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // max is in bytes
-        .nest_service("/assets", serve_dir.clone())
+        .nest_service("/", serve_dir.clone())
         .fallback_service(serve_dir)
         .layer(cors)
 }

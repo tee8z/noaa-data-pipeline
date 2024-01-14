@@ -12,9 +12,7 @@ use parquet_derive::ParquetRecordWriter;
 use slog::{debug, Logger};
 use std::sync::Arc;
 use std::{collections::HashMap, ops::Add};
-use time::{
-    format_description::well_known::Rfc3339, macros::format_description, Duration, OffsetDateTime,
-};
+use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime};
 /*
 More Options defined  here:
 TODO: pull list down from the website and request everything
@@ -53,11 +51,11 @@ pub struct WeatherForecast {
     pub twelve_hour_probability_of_precipitation_unit_code: String,
 }
 
-#[derive(ParquetRecordWriter)]
+#[derive(ParquetRecordWriter, Debug)]
 pub struct Forecast {
     pub station_id: String,
-    pub latitude: String,
-    pub longitude: String,
+    pub latitude: f64,
+    pub longitude: f64,
     pub generated_at: String,
     pub begin_time: String,
     pub end_time: String,
@@ -80,23 +78,21 @@ pub struct Forecast {
 impl TryFrom<WeatherForecast> for Forecast {
     type Error = anyhow::Error;
     fn try_from(val: WeatherForecast) -> Result<Self, Self::Error> {
-        let rfc_3339_time_description =
-            format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]Z");
         let parquet = Forecast {
             station_id: val.station_id,
-            latitude: val.latitude,
-            longitude: val.longitude,
+            latitude: val.latitude.parse::<f64>()?,
+            longitude: val.longitude.parse::<f64>()?,
             generated_at: val
                 .generated_at
-                .format(rfc_3339_time_description)
+                .format(&Rfc3339)
                 .map_err(|e| anyhow!("error formatting generated_at time: {}", e))?,
             begin_time: val
                 .begin_time
-                .format(rfc_3339_time_description)
+                .format(&Rfc3339)
                 .map_err(|e| anyhow!("error formatting begin time: {}", e))?,
             end_time: val
-                .begin_time
-                .format(rfc_3339_time_description)
+                .end_time
+                .format(&Rfc3339)
                 .map_err(|e| anyhow!("error formatting end time: {}", e))?,
             max_temp: val.max_temp,
             min_temp: val.min_temp,
@@ -299,6 +295,8 @@ pub struct TimeWindow {
 impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
     type Error = anyhow::Error;
     fn try_from(raw_data: Dwml) -> Result<Self, Self::Error> {
+        println!("trying to convert into flatted weather forecast format");
+
         let mut time_layouts: HashMap<String, Vec<TimeRange>> = HashMap::new();
         for time_layout in raw_data.data.time_layout {
             let time_range: Vec<TimeRange> = time_layout.to_time_ranges()?;
@@ -312,13 +310,14 @@ impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
         raw_data.data.location.iter().for_each(|location| {
             let weather_forecast =
                 get_forecasts_ranges(location, generated_at, time_layouts.clone());
+            println!("inserting into weather_data: {:?}", weather_forecast);
             weather.insert(location.location_key.clone(), weather_forecast);
         });
 
         for parameter_point in raw_data.data.parameters {
             let location_key = parameter_point.applicable_location.clone();
             let weather_data = weather.get_mut(&location_key).unwrap();
-
+            println!("found weather_data: {:?}", weather_data);
             for temp in parameter_point.temperature.clone() {
                 // We want this to panic, we should never have a time layout that doesn't exist in the map
                 let temp_times = time_layouts.get(&temp.time_layout).unwrap();
@@ -361,11 +360,13 @@ impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
                 .get(&parameter_point.wind_speed.time_layout)
                 .unwrap();
             add_data(weather_data, wind_speed_times, &parameter_point.wind_speed)?;
-        }
 
+            println!("updated weather_data: {:?}", weather_data);
+        }
         Ok(weather)
     }
 }
+
 // weather_data is always in 3 hour intervals, time_ranges can be in 3,6,12,24 ranges
 fn add_data(
     weather_data: &mut [WeatherForecast],
@@ -373,16 +374,24 @@ fn add_data(
     data: &DataReading,
 ) -> Result<(), Error> {
     for current_data in weather_data.iter_mut() {
-        let time_interval_index =
-            time_ranges
-                .iter()
-                .enumerate()
-                .position(|(_index, time_range)| {
-                    time_range.start_time <= current_data.begin_time
-                        && ((time_range.end_time.is_some()
-                            && time_range.end_time.unwrap() >= current_data.end_time)
-                            || time_range.end_time.is_none())
-                });
+        let mut time_iter = time_ranges.iter();
+        let mut current_time = time_iter.next().unwrap();
+        let mut time_interval_index: Option<usize> = None;
+        // This is an important time comparison, if there are more None's than expected this may be the source
+        while current_time.start_time <= current_data.begin_time {
+            time_interval_index = if let Some(mut interval) = time_interval_index {
+                interval += 1;
+                Some(interval)
+            } else {
+                Some(0)
+            };
+            if let Some(next_time) = time_iter.next() {
+                current_time = next_time
+            } else {
+                break;
+            }
+        }
+
         match data.reading_type {
             Liquid => {
                 if let Some(index) = time_interval_index {
@@ -393,8 +402,7 @@ fn add_data(
             }
             Maximum => {
                 if let Some(index) = time_interval_index {
-                    current_data.max_temp =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    current_data.max_temp = Some((data.value.get(index)).unwrap().parse::<i64>()?);
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
@@ -407,8 +415,7 @@ fn add_data(
             }
             Minimum => {
                 if let Some(index) = time_interval_index {
-                    current_data.min_temp =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    current_data.min_temp = Some((data.value.get(index)).unwrap().parse::<i64>()?);
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
@@ -454,7 +461,6 @@ pub async fn get_forecasts(
 
     //TODO: call 200 stations at a time, max allowed
     let url = get_url(city_weather);
-    debug!(logger.clone(), "url: {}", url);
     let raw_xml = fetch_xml(logger, &url).await?;
     debug!(logger.clone(), "raw xml: {}", raw_xml);
 
@@ -464,14 +470,22 @@ pub async fn get_forecasts(
 
     let current_forecast_data: HashMap<String, Vec<WeatherForecast>> =
         weather_with_stations.try_into()?;
+
+    debug!(
+        logger.clone(),
+        "current_forecast_data: {:?}", current_forecast_data
+    );
+
     //TODO: add each 200 parsed data into the HashMap (should be keyed on station_id and then a list of each weather reading per day)
     forecast_data.extend(current_forecast_data);
 
     let mut forecasts = vec![];
-    for week_forecast in forecast_data.values() {
-        for daily_forecast in week_forecast {
-            let current = daily_forecast.clone();
+    for all_forecasts in forecast_data.values() {
+        for weather_forecats in all_forecasts {
+            let current = weather_forecats.clone();
+            debug!(logger.clone(), "current weather forecast: {:?}", current);
             let forecast: Forecast = current.try_into()?;
+            debug!(logger.clone(), "parquet format forecast: {:?}", forecast);
             forecasts.push(forecast)
         }
     }
@@ -484,11 +498,25 @@ fn get_forecasts_ranges(
     generated_at: OffsetDateTime,
     time_layouts: HashMap<String, Vec<TimeRange>>,
 ) -> Vec<WeatherForecast> {
-    //NOTE: We're assuming we always have access to the `k-p3h-n41-4` time layout
-    let time_3_hour_interval = time_layouts.get("k-p3h-n41-4").unwrap();
-    let first_time = time_3_hour_interval.first().unwrap().start_time;
-    let last_time = time_3_hour_interval.last().unwrap().start_time;
+    let mut first_start_time_only: Vec<OffsetDateTime> = time_layouts
+        .iter()
+        .filter(|(_, time_ranges)| time_ranges.first().unwrap().end_time.is_none())
+        .map(|(_, time_ranges)| time_ranges.first().unwrap().start_time)
+        .collect();
 
+    first_start_time_only.sort_by(|a, b| a.cmp(&b));
+    let first_time = first_start_time_only.first().unwrap().clone();
+
+    let mut last_start_time_only: Vec<OffsetDateTime> = time_layouts
+        .iter()
+        .filter(|(_, time_ranges)| time_ranges.first().unwrap().end_time.is_none())
+        .map(|(_, time_ranges)| time_ranges.last().unwrap().start_time)
+        .collect();
+
+    last_start_time_only.sort_by(|a, b| a.cmp(&b));
+    let last_time = last_start_time_only.last().unwrap().clone();
+    println!("first_time: {:?}", first_time);
+    println!("last_time: {:?}", last_time);
     let time_window = TimeWindow {
         first_time,
         last_time,
@@ -501,7 +529,7 @@ fn get_forecasts_ranges(
         let end_time = current_time + time_window.time_interval;
 
         let weather_forecast = WeatherForecast {
-            station_id: location.station_id.clone().unwrap(),
+            station_id: location.station_id.clone().unwrap_or_default(),
             latitude: location.point.latitude.clone(),
             longitude: location.point.longitude.clone(),
             generated_at,
@@ -540,18 +568,23 @@ fn add_station_ids(city_weather: &CityWeather, mut converted_xml: Dwml) -> Dwml 
         .map(|location| {
             let latitude = location.point.latitude.clone();
             let longitude = location.point.longitude.clone();
+
             let station_id = city_weather
                 .city_data
                 .clone()
                 .values()
-                .find(|val| val.latitude == latitude && val.longitude == longitude)
-                .unwrap()
-                .station_id
-                .clone();
+                // xml files always provide these to 2 decimal places, make sure to match on that percision
+                .find(|val| {
+                    val.latitude.parse::<f64>().unwrap() == latitude.parse::<f64>().unwrap()
+                        && val.longitude.parse::<f64>().unwrap()
+                            == longitude.parse::<f64>().unwrap()
+                })
+                .map(|val| val.station_id.clone());
+
             Location {
                 location_key: location.location_key.clone(),
                 point: location.point.clone(),
-                station_id: Some(station_id),
+                station_id,
             }
         })
         .collect();

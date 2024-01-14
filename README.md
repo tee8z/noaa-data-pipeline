@@ -12,14 +12,14 @@
 - Info on where the data used to generate the parquet files comes from:
     - Observations: https://w1.weather.gov/xml/current_obs/all_xml.zip
     - Forecasts (Multiple Point Unsummarized Data): https://graphical.weather.gov/xml/rest.php
-- These xml data files are update once an hour by NOAA, so to be respectful of their services we run our data pulling process once an hour as well
+- These xml data files are updated once an hour by NOAA, so to be respectful of their services we run our data pulling process once an hour as well
 
 ### How the system works:
 - daemon:
     - Background process to pull down data from NOAA and transform it into flatted parquet files. These files are then pushed to the `parquet_file_service` via the REST endpoint `POST http://localhost:9100/file` (via multipart form)
 - parquet_file_service:
     - A REST API that takes in the parquet files and allows downloading of them from a arebones browser UI that is also hosts.
-- assets:
+- ui:
     - Holds the browser UI that's just an index.html and main.js file. It uses `@duckdb/duckdb-wasm` to allow the end user to query directly against the download parquet files
     - It uses `https://bulma.io/` for css styling
 

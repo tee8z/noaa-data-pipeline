@@ -1,9 +1,11 @@
-use serde::{Deserialize, Serialize};
-use time::{OffsetDateTime, macros::format_description};
-use anyhow::{anyhow, Error};
-use crate::TimeRange;
+use std::fmt::{Display, self};
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+use crate::TimeRange;
+use anyhow::{anyhow, Error};
+use serde::{Deserialize, Serialize};
+use time::{macros::format_description, OffsetDateTime};
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename = "dwml")]
 pub struct Dwml {
     #[serde(rename = "head")]
@@ -16,7 +18,7 @@ pub struct Dwml {
     pub version: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Data {
     #[serde(rename = "location")]
     pub location: Vec<Location>,
@@ -31,13 +33,16 @@ pub struct Data {
     pub parameters: Vec<Parameter>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Location {
     #[serde(rename = "location-key")]
     pub location_key: String,
 
     #[serde(rename = "point")]
     pub point: Point,
+
+    // This is added after parsing to add in mapping the data further down the pipeline
+    pub station_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -49,13 +54,13 @@ pub struct Point {
     pub longitude: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct MoreWeatherInformation {
     #[serde(rename = "applicable-location")]
     pub applicable_location: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Parameter {
     #[serde(rename = "temperature")]
     //holds max and min
@@ -81,7 +86,7 @@ pub struct Parameter {
     pub applicable_location: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct DataReading {
     #[serde(rename = "name")]
     pub name: Name,
@@ -99,7 +104,7 @@ pub struct DataReading {
     pub time_layout: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct TimeLayout {
     #[serde(rename = "time-coordinate")]
@@ -109,7 +114,7 @@ pub struct TimeLayout {
     pub time: Vec<Time>,
 }
 impl TimeLayout {
-    pub fn to_time_ranges(&self) -> Result<Vec<TimeRange>,Error> {
+    pub fn to_time_ranges(&self) -> Result<Vec<TimeRange>, Error> {
         let mut result = Vec::new();
         let mut current_key = String::new();
         let mut current_start_time: Option<OffsetDateTime> = None;
@@ -132,12 +137,14 @@ impl TimeLayout {
                     current_start_time = None;
                 }
                 Time::StartTime(start_time) => {
-                    let current_time = OffsetDateTime::parse(start_time, description).map_err(|e| anyhow!("error parsing time {}", e))?;
+                    let current_time = OffsetDateTime::parse(start_time, description)
+                        .map_err(|e| anyhow!("error parsing time {}", e))?;
                     current_start_time = Some(current_time);
                 }
                 Time::EndTime(end_time) => {
                     if let Some(start_time) = current_start_time.take() {
-                        let current_time = OffsetDateTime::parse(end_time, description).map_err(|e| anyhow!("error parsing time {}", e))?;
+                        let current_time = OffsetDateTime::parse(end_time, description)
+                            .map_err(|e| anyhow!("error parsing time {}", e))?;
                         let time_range = TimeRange {
                             key: current_key.clone(),
                             start_time,
@@ -163,7 +170,7 @@ impl TimeLayout {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub enum Time {
     #[serde(rename = "layout-key")]
     LayoutKey(String),
@@ -173,7 +180,7 @@ pub enum Time {
     EndTime(String),
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Head {
     #[serde(rename = "product")]
     pub product: Product,
@@ -182,7 +189,7 @@ pub struct Head {
     pub source: Source,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Product {
     #[serde(rename = "title")]
     pub title: String,
@@ -194,7 +201,7 @@ pub struct Product {
     pub category: String,
 
     #[serde(rename = "creation-date")]
-    pub creation_date: CreationDate,
+    pub creation_date: String,
 
     #[serde(rename = "srsName")]
     pub srs_name: String,
@@ -206,13 +213,14 @@ pub struct Product {
     pub operational_mode: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+/*
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct CreationDate {
     #[serde(rename = "refresh-frequency")]
     pub refresh_frequency: String,
-}
+}*/
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Source {
     #[serde(rename = "more-information")]
     pub more_information: String,
@@ -233,13 +241,13 @@ pub struct Source {
     pub feedback: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ProductionCenter {
     #[serde(rename = "sub-center")]
     pub sub_center: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum Type {
     #[serde(rename = "liquid")]
     Liquid,
@@ -260,13 +268,13 @@ pub enum Type {
     Sustained,
 
     #[serde(rename = "12 hour")]
-    The12Hour,
+    ProbabilityOfPrecipitationWithin12Hours,
 
     #[serde(rename = "wind")]
     Wind,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum Name {
     #[serde(rename = "Daily Maximum Relative Humidity")]
     DailyMaximumRelativeHumidity,
@@ -293,7 +301,7 @@ pub enum Name {
     WindSpeed,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum Units {
     #[serde(rename = "degrees true")]
     DegreesTrue,
@@ -311,13 +319,25 @@ pub enum Units {
     Percent,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+impl Display for Units {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Units::DegreesTrue => write!(f, "degrees true"),
+            Units::Fahrenheit => write!(f, "fahrenheit"),
+            Units::Inches => write!(f, "inches"),
+            Units::Knots =>write!(f, "knots"),
+            Units::Percent =>write!(f, "percent"),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum Summarization {
     #[serde(rename = "none")]
     None,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum TimeCoordinate {
     #[serde(rename = "local")]
     Local,

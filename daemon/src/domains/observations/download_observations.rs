@@ -223,11 +223,11 @@ pub async fn get_observations(
         let current = value.clone();
         let observation: Observation = current.try_into()?;
         observations.push(observation)
-    };
+    }
     Ok(observations)
 }
 
-fn find_file_indexes_for_stations<'a>(
+fn find_file_indexes_for_stations(
     zip_file: File,
     station_ids: HashSet<String>,
 ) -> Result<Vec<usize>, Error> {
@@ -235,7 +235,7 @@ fn find_file_indexes_for_stations<'a>(
     let mut archive = ZipArchive::new(zip_file)?;
     for i in 0..archive.len() {
         let entry = archive.by_index(i)?;
-        let entry_name = entry.name().split('.').nth(0).unwrap();
+        let entry_name = entry.name().split('.').next().unwrap();
         if station_ids.contains(entry_name) {
             matching_entries.push(i);
         }

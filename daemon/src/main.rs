@@ -4,7 +4,7 @@ use daemon::{
     send_parquet_files, setup_logger, Cli,
 };
 use time::OffsetDateTime;
-use tokio;
+
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {

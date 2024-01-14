@@ -1,4 +1,8 @@
-use crate::{fetch_xml, CityWeather, Dwml, Point};
+use crate::Type::{
+    Liquid, Maximum, MaximumRelative, Minimum, MinimumRelative,
+    ProbabilityOfPrecipitationWithin12Hours, Sustained, Wind,
+};
+use crate::{fetch_xml, CityWeather, DataReading, Dwml, Location, Units};
 use anyhow::{anyhow, Error};
 use parquet::{
     basic::{ConvertedType, Repetition, Type as PhysicalType},
@@ -7,7 +11,7 @@ use parquet::{
 use parquet_derive::ParquetRecordWriter;
 use slog::{debug, Logger};
 use std::sync::Arc;
-use std::{collections::HashMap, fmt, ops::Add};
+use std::{collections::HashMap, ops::Add};
 use time::{
     format_description::well_known::Rfc3339, macros::format_description, Duration, OffsetDateTime,
 };
@@ -33,19 +37,19 @@ pub struct WeatherForecast {
     pub generated_at: OffsetDateTime,
     pub begin_time: OffsetDateTime,
     pub end_time: OffsetDateTime,
-    pub max_temp: f64,
-    pub min_temp: f64,
+    pub max_temp: Option<i64>,
+    pub min_temp: Option<i64>,
     pub temperature_unit_code: String,
-    pub wind_speed: f64,
+    pub wind_speed: Option<i64>,
     pub wind_speed_unit_code: String,
-    pub wind_direction: i64,
+    pub wind_direction: Option<i64>,
     pub wind_direction_unit_code: String,
-    pub relative_humidity_max: f64,
-    pub relative_humidity_min: f64,
+    pub relative_humidity_max: Option<i64>,
+    pub relative_humidity_min: Option<i64>,
     pub relative_humidity_unit_code: String,
-    pub liquid_precipitation_amt: f64,
+    pub liquid_precipitation_amt: Option<f64>,
     pub liquid_precipitation_unit_code: String,
-    pub twelve_hour_probability_of_precipitation: f64,
+    pub twelve_hour_probability_of_precipitation: Option<i64>,
     pub twelve_hour_probability_of_precipitation_unit_code: String,
 }
 
@@ -57,19 +61,19 @@ pub struct Forecast {
     pub generated_at: String,
     pub begin_time: String,
     pub end_time: String,
-    pub max_temp: f64,
-    pub min_temp: f64,
+    pub max_temp: Option<i64>,
+    pub min_temp: Option<i64>,
     pub temperature_unit_code: String,
-    pub wind_speed: f64,
+    pub wind_speed: Option<i64>,
     pub wind_speed_unit_code: String,
-    pub wind_direction: i64,
+    pub wind_direction: Option<i64>,
     pub wind_direction_unit_code: String,
-    pub relative_humidity_max: f64,
-    pub relative_humidity_min: f64,
+    pub relative_humidity_max: Option<i64>,
+    pub relative_humidity_min: Option<i64>,
     pub relative_humidity_unit_code: String,
-    pub liquid_precipitation_amt: f64,
+    pub liquid_precipitation_amt: Option<f64>,
     pub liquid_precipitation_unit_code: String,
-    pub twelve_hour_probability_of_precipitation: f64,
+    pub twelve_hour_probability_of_precipitation: Option<i64>,
     pub twelve_hour_probability_of_precipitation_unit_code: String,
 }
 
@@ -117,35 +121,35 @@ impl TryFrom<WeatherForecast> for Forecast {
 pub fn create_forecast_schema() -> Type {
     let station_id = Type::primitive_type_builder("station_id", PhysicalType::BYTE_ARRAY)
         .with_converted_type(ConvertedType::UTF8)
-        .with_repetition(Repetition::OPTIONAL)
+        .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
 
     let latitude = Type::primitive_type_builder("latitude", PhysicalType::DOUBLE)
-        .with_repetition(Repetition::OPTIONAL)
+        .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
 
     let longitude = Type::primitive_type_builder("longitude", PhysicalType::DOUBLE)
-        .with_repetition(Repetition::OPTIONAL)
+        .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
 
     let generated_at = Type::primitive_type_builder("generated_at", PhysicalType::BYTE_ARRAY)
         .with_converted_type(ConvertedType::UTF8)
-        .with_repetition(Repetition::OPTIONAL)
+        .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
 
     let begin_time = Type::primitive_type_builder("begin_time", PhysicalType::BYTE_ARRAY)
         .with_converted_type(ConvertedType::UTF8)
-        .with_repetition(Repetition::OPTIONAL)
+        .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
 
     let end_time = Type::primitive_type_builder("end_time", PhysicalType::BYTE_ARRAY)
         .with_converted_type(ConvertedType::UTF8)
-        .with_repetition(Repetition::OPTIONAL)
+        .with_repetition(Repetition::REQUIRED)
         .build()
         .unwrap();
 
@@ -162,7 +166,7 @@ pub fn create_forecast_schema() -> Type {
     let temperature_unit_code =
         Type::primitive_type_builder("temperature_unit_code", PhysicalType::BYTE_ARRAY)
             .with_converted_type(ConvertedType::UTF8)
-            .with_repetition(Repetition::OPTIONAL)
+            .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
 
@@ -174,7 +178,7 @@ pub fn create_forecast_schema() -> Type {
     let wind_speed_unit_code =
         Type::primitive_type_builder("wind_speed_unit_code", PhysicalType::BYTE_ARRAY)
             .with_converted_type(ConvertedType::UTF8)
-            .with_repetition(Repetition::OPTIONAL)
+            .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
 
@@ -186,7 +190,7 @@ pub fn create_forecast_schema() -> Type {
     let wind_direction_unit_code =
         Type::primitive_type_builder("wind_direction_unit_code", PhysicalType::BYTE_ARRAY)
             .with_converted_type(ConvertedType::UTF8)
-            .with_repetition(Repetition::OPTIONAL)
+            .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
 
@@ -205,7 +209,7 @@ pub fn create_forecast_schema() -> Type {
     let relative_humidity_unit_code =
         Type::primitive_type_builder("relative_humidity_unit_code", PhysicalType::BYTE_ARRAY)
             .with_converted_type(ConvertedType::UTF8)
-            .with_repetition(Repetition::OPTIONAL)
+            .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
 
@@ -218,7 +222,7 @@ pub fn create_forecast_schema() -> Type {
     let liquid_precipitation_unit_code =
         Type::primitive_type_builder("liquid_precipitation_unit_code", PhysicalType::BYTE_ARRAY)
             .with_converted_type(ConvertedType::UTF8)
-            .with_repetition(Repetition::OPTIONAL)
+            .with_repetition(Repetition::REQUIRED)
             .build()
             .unwrap();
 
@@ -235,7 +239,7 @@ pub fn create_forecast_schema() -> Type {
         PhysicalType::BYTE_ARRAY,
     )
     .with_converted_type(ConvertedType::UTF8)
-    .with_repetition(Repetition::OPTIONAL)
+    .with_repetition(Repetition::REQUIRED)
     .build()
     .unwrap();
 
@@ -268,10 +272,28 @@ pub fn create_forecast_schema() -> Type {
     schema
 }
 
+#[derive(Debug, Clone)]
+pub struct TimeDelta {
+    pub first_start: OffsetDateTime,
+    pub last_end: OffsetDateTime,
+    pub delta_between_readings: Duration,
+    pub delta_between_start_and_end: Option<Duration>,
+    pub key: String,
+    pub time_ranges: Vec<TimeRange>,
+}
+
+#[derive(Debug, Clone)]
 pub struct TimeRange {
     pub key: String,
     pub start_time: OffsetDateTime,
     pub end_time: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TimeWindow {
+    pub first_time: OffsetDateTime,
+    pub last_time: OffsetDateTime,
+    pub time_interval: Duration,
 }
 
 impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
@@ -280,37 +302,148 @@ impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
         let mut time_layouts: HashMap<String, Vec<TimeRange>> = HashMap::new();
         for time_layout in raw_data.data.time_layout {
             let time_range: Vec<TimeRange> = time_layout.to_time_ranges()?;
-            match time_range.first() {
-                None => (),
-                Some(first_item) => {
-                    time_layouts.insert(first_item.key.clone(), time_range);
-                }
-            }
+            time_layouts.insert(time_range.first().unwrap().key.clone(), time_range);
         }
 
-        let mut points: HashMap<String, Point> = HashMap::new();
+        // The `location-key` is the key for each hashmap entry
+        let mut weather: HashMap<String, Vec<WeatherForecast>> = HashMap::new();
+        let generated_at = OffsetDateTime::parse(&raw_data.head.product.creation_date, &Rfc3339)?;
+
         raw_data.data.location.iter().for_each(|location| {
-            points.insert(location.location_key.clone(), location.point.clone());
+            let weather_forecast =
+                get_forecasts_ranges(location, generated_at, time_layouts.clone());
+            weather.insert(location.location_key.clone(), weather_forecast);
         });
 
-        let mut weather: HashMap<String, Vec<WeatherForecast>> = HashMap::new();
-        raw_data.data.parameters.iter().for_each(|parameter_point| {
-            //let point = parameter_point.applicable_location;
-            //TODO: THIS IS THE TRICKY MAPPING PART!!
-        });
+        for parameter_point in raw_data.data.parameters {
+            let location_key = parameter_point.applicable_location.clone();
+            let weather_data = weather.get_mut(&location_key).unwrap();
+
+            for temp in parameter_point.temperature.clone() {
+                // We want this to panic, we should never have a time layout that doesn't exist in the map
+                let temp_times = time_layouts.get(&temp.time_layout).unwrap();
+                add_data(weather_data, temp_times, &temp)?;
+            }
+
+            for humidity in parameter_point.humidity.clone() {
+                let humidity_times = time_layouts.get(&humidity.time_layout).unwrap();
+                add_data(weather_data, humidity_times, &humidity)?;
+            }
+
+            let precipitation_times = time_layouts
+                .get(&parameter_point.precipitation.time_layout)
+                .unwrap();
+            add_data(
+                weather_data,
+                precipitation_times,
+                &parameter_point.precipitation,
+            )?;
+
+            let probability_of_precipitation_times = time_layouts
+                .get(&parameter_point.probability_of_precipitation.time_layout)
+                .unwrap();
+            add_data(
+                weather_data,
+                probability_of_precipitation_times,
+                &parameter_point.probability_of_precipitation,
+            )?;
+
+            let wind_direction_times = time_layouts
+                .get(&parameter_point.wind_direction.time_layout)
+                .unwrap();
+            add_data(
+                weather_data,
+                wind_direction_times,
+                &parameter_point.wind_direction,
+            )?;
+
+            let wind_speed_times = time_layouts
+                .get(&parameter_point.wind_speed.time_layout)
+                .unwrap();
+            add_data(weather_data, wind_speed_times, &parameter_point.wind_speed)?;
+        }
 
         Ok(weather)
     }
 }
-
-impl fmt::Display for WeatherForecast {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Station ID: {}, Max Temp: {}, Min Temp: {}",
-            self.station_id, self.max_temp, self.min_temp
-        )
+// weather_data is always in 3 hour intervals, time_ranges can be in 3,6,12,24 ranges
+fn add_data(
+    weather_data: &mut [WeatherForecast],
+    time_ranges: &[TimeRange],
+    data: &DataReading,
+) -> Result<(), Error> {
+    for current_data in weather_data.iter_mut() {
+        let time_interval_index =
+            time_ranges
+                .iter()
+                .enumerate()
+                .position(|(_index, time_range)| {
+                    time_range.start_time <= current_data.begin_time
+                        && ((time_range.end_time.is_some()
+                            && time_range.end_time.unwrap() >= current_data.end_time)
+                            || time_range.end_time.is_none())
+                });
+        match data.reading_type {
+            Liquid => {
+                if let Some(index) = time_interval_index {
+                    current_data.liquid_precipitation_amt =
+                        Some((data.value.get(index)).unwrap().parse::<f64>()?);
+                }
+                current_data.liquid_precipitation_unit_code = data.units.to_string();
+            }
+            Maximum => {
+                if let Some(index) = time_interval_index {
+                    current_data.max_temp =
+                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                }
+                current_data.temperature_unit_code = data.units.to_string();
+            }
+            MaximumRelative => {
+                if let Some(index) = time_interval_index {
+                    current_data.relative_humidity_max =
+                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                }
+                current_data.relative_humidity_unit_code = data.units.to_string();
+            }
+            Minimum => {
+                if let Some(index) = time_interval_index {
+                    current_data.min_temp =
+                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                }
+                current_data.temperature_unit_code = data.units.to_string();
+            }
+            MinimumRelative => {
+                if let Some(index) = time_interval_index {
+                    current_data.relative_humidity_min =
+                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                }
+                current_data.relative_humidity_unit_code = data.units.to_string();
+            }
+            Sustained => {
+                if let Some(index) = time_interval_index {
+                    current_data.wind_speed =
+                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                }
+                current_data.wind_speed_unit_code = data.units.to_string();
+            }
+            ProbabilityOfPrecipitationWithin12Hours => {
+                if let Some(index) = time_interval_index {
+                    current_data.twelve_hour_probability_of_precipitation =
+                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                }
+                current_data.twelve_hour_probability_of_precipitation_unit_code =
+                    data.units.to_string();
+            }
+            Wind => {
+                if let Some(index) = time_interval_index {
+                    current_data.wind_direction =
+                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                }
+                current_data.wind_direction_unit_code = data.units.to_string();
+            }
+        }
     }
+    Ok(())
 }
 
 pub async fn get_forecasts(
@@ -324,12 +457,15 @@ pub async fn get_forecasts(
     debug!(logger.clone(), "url: {}", url);
     let raw_xml = fetch_xml(logger, &url).await?;
     debug!(logger.clone(), "raw xml: {}", raw_xml);
+
     let converted_xml: Dwml = serde_xml_rs::from_str(&raw_xml)?;
-    debug!(logger.clone(), "converted xml: {:?}", converted_xml);
-    let current_forecast_data: HashMap<String, Vec<WeatherForecast>> = converted_xml.try_into()?;
+    let weather_with_stations = add_station_ids(city_weather, converted_xml);
+    debug!(logger.clone(), "converted xml: {:?}", weather_with_stations);
+
+    let current_forecast_data: HashMap<String, Vec<WeatherForecast>> =
+        weather_with_stations.try_into()?;
     //TODO: add each 200 parsed data into the HashMap (should be keyed on station_id and then a list of each weather reading per day)
     forecast_data.extend(current_forecast_data);
-
 
     let mut forecasts = vec![];
     for week_forecast in forecast_data.values() {
@@ -338,9 +474,88 @@ pub async fn get_forecasts(
             let forecast: Forecast = current.try_into()?;
             forecasts.push(forecast)
         }
-    };
+    }
 
     Ok(forecasts)
+}
+
+fn get_forecasts_ranges(
+    location: &Location,
+    generated_at: OffsetDateTime,
+    time_layouts: HashMap<String, Vec<TimeRange>>,
+) -> Vec<WeatherForecast> {
+    //NOTE: We're assuming we always have access to the `k-p3h-n41-4` time layout
+    let time_3_hour_interval = time_layouts.get("k-p3h-n41-4").unwrap();
+    let first_time = time_3_hour_interval.first().unwrap().start_time;
+    let last_time = time_3_hour_interval.last().unwrap().start_time;
+
+    let time_window = TimeWindow {
+        first_time,
+        last_time,
+        time_interval: Duration::hours(3),
+    };
+    let mut forecasts = Vec::new();
+    let mut current_time = time_window.first_time;
+
+    while current_time <= time_window.last_time {
+        let end_time = current_time + time_window.time_interval;
+
+        let weather_forecast = WeatherForecast {
+            station_id: location.station_id.clone().unwrap(),
+            latitude: location.point.latitude.clone(),
+            longitude: location.point.longitude.clone(),
+            generated_at,
+            begin_time: current_time,
+            end_time,
+            max_temp: None,
+            min_temp: None,
+            temperature_unit_code: Units::Fahrenheit.to_string(),
+            wind_speed: None,
+            wind_speed_unit_code: Units::Knots.to_string(),
+            wind_direction: None,
+            wind_direction_unit_code: Units::DegreesTrue.to_string(),
+            relative_humidity_max: None,
+            relative_humidity_min: None,
+            relative_humidity_unit_code: Units::Percent.to_string(),
+            liquid_precipitation_amt: None,
+            liquid_precipitation_unit_code: Units::Inches.to_string(),
+            twelve_hour_probability_of_precipitation: None,
+            twelve_hour_probability_of_precipitation_unit_code: Units::Percent.to_string(),
+        };
+
+        forecasts.push(weather_forecast);
+
+        // Move to the next time interval
+        current_time = end_time;
+    }
+
+    forecasts
+}
+
+fn add_station_ids(city_weather: &CityWeather, mut converted_xml: Dwml) -> Dwml {
+    converted_xml.data.location = converted_xml
+        .data
+        .location
+        .iter()
+        .map(|location| {
+            let latitude = location.point.latitude.clone();
+            let longitude = location.point.longitude.clone();
+            let station_id = city_weather
+                .city_data
+                .clone()
+                .values()
+                .find(|val| val.latitude == latitude && val.longitude == longitude)
+                .unwrap()
+                .station_id
+                .clone();
+            Location {
+                location_key: location.location_key.clone(),
+                point: location.point.clone(),
+                station_id: Some(station_id),
+            }
+        })
+        .collect();
+    converted_xml
 }
 
 fn get_url(city_weather: &CityWeather) -> String {

@@ -1,48 +1,20 @@
 use anyhow::{anyhow, Error};
 use parquet::{
-    file::{
-        properties::WriterProperties,
-        writer::SerializedFileWriter,
-    },
+    file::{properties::WriterProperties, writer::SerializedFileWriter},
     record::RecordWriter,
 };
 use reqwest::Client;
-use std::error::Error as ErrorStd;
-use std::{
-    fmt,
-    fs::File,
-    io::Read,
-    sync::Arc,
+use std::{fs::File, io::Read, sync::Arc};
+
+use crate::{
+    create_forecast_schema, create_observation_schema, get_full_path, Forecast, Observation,
 };
 
-use crate::{create_observation_schema, Observation, Forecast, create_forecast_schema, get_full_path};
-
-#[derive(Debug)]
-pub enum FileError {
-    NotFound,
-}
-
-impl Default for FileError {
-    fn default() -> Self {
-        FileError::NotFound
-    }
-}
-
-impl ErrorStd for FileError {
-    fn description(&self) -> &str {
-        match self {
-            FileError::NotFound => "file path not found",
-        }
-    }
-}
-
-impl fmt::Display for FileError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "error: {}", self.to_string())
-    }
-}
-
-pub fn save_observations(observations: Vec<Observation>, root_path: &str, file_name: String) -> String {
+pub fn save_observations(
+    observations: Vec<Observation>,
+    root_path: &str,
+    file_name: String,
+) -> String {
     let full_name = format!("{}/{}.parquet", root_path, file_name);
 
     let file = File::create(full_name.clone()).unwrap();
@@ -80,7 +52,10 @@ pub fn save_forecasts(forecast: Vec<Forecast>, root_path: &str, file_name: Strin
     full_name
 }
 
-pub async fn send_parquet_files(observation_file: String, forecast_file: String) -> Result<(), Error> {
+pub async fn send_parquet_files(
+    observation_file: String,
+    forecast_file: String,
+) -> Result<(), Error> {
     let observation_path = get_full_path(observation_file.clone());
     let forecast_path = get_full_path(forecast_file.clone());
 

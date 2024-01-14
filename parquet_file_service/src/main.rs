@@ -27,7 +27,7 @@ use tower_http::{
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let app = app();
-    let listener = SocketAddr::from_str(&"0.0.0.0:9100").unwrap();
+    let listener = SocketAddr::from_str("0.0.0.0:9100").unwrap();
     axum::Server::bind(&listener)
         .serve(app.into_make_service())
         .await?;
@@ -62,7 +62,7 @@ async fn download(
 
     let file = File::open(file_path)
         .await
-        .map_err(|err| return (StatusCode::NOT_FOUND, format!("File not found: {}", err)))
+        .map_err(|err| (StatusCode::NOT_FOUND, format!("File not found: {}", err)))
         .unwrap();
 
     // convert the `AsyncRead` into a `Stream`
@@ -72,7 +72,7 @@ async fn download(
     let mut headers = HeaderMap::new();
     headers.insert(
         CONTENT_TYPE,
-        HeaderValue::from_str(&"application/parquet").unwrap(),
+        HeaderValue::from_str("application/parquet").unwrap(),
     );
     headers.insert(
         CONTENT_DISPOSITION,

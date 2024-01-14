@@ -1,4 +1,4 @@
-use std::{io::Write, fs::File, env};
+use std::{env, fs::File, io::Write};
 
 use anyhow::{anyhow, Error};
 use clap::Parser;
@@ -6,7 +6,7 @@ use futures::StreamExt;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
-use slog::{debug, Logger, Level, Drain, o};
+use slog::{debug, o, Drain, Level, Logger};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -43,10 +43,8 @@ pub fn setup_logger(cli: &Cli) -> Logger {
     let drain = slog_term::CompactFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
     let drain = drain.filter_level(log_level).fuse();
-    let log = slog::Logger::root(drain, o!("version" => "0.5"));
-    log
+    slog::Logger::root(drain, o!("version" => "0.5"))
 }
-
 
 pub async fn fetch_xml(logger: &Logger, url: &str) -> Result<String, Error> {
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
@@ -92,9 +90,7 @@ pub async fn fetch_xml_zip(logger: &Logger, url: &str) -> Result<File, Error> {
     temp_file.sync_all()?;
 
     Ok(temp_file)
-
 }
-
 
 pub fn get_full_path(relative_path: String) -> String {
     let mut current_dir = env::current_dir().expect("Failed to get current directory");

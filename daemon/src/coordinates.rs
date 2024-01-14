@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::get_full_path;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct WeatherStation {
     pub station_id: String,
     pub latitude: String,
@@ -20,7 +20,7 @@ impl fmt::Display for WeatherStation {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct CityWeather {
     #[serde(flatten)]
     pub city_data: std::collections::HashMap<String, WeatherStation>,
@@ -31,12 +31,8 @@ impl fmt::Display for CityWeather {
         for (city, station) in &self.city_data {
             writeln!(
                 f,
-                "City: {}, {}",
-                city,
-                format!(
-                    "Station ID: {}, Latitude: {}, Longitude: {}",
-                    station.station_id, station.latitude, station.longitude
-                )
+                "City: {}, Station ID: {}, Latitude: {}, Longitude: {}",
+                city, station.station_id, station.latitude, station.longitude
             )?;
         }
         Ok(())
@@ -45,8 +41,8 @@ impl fmt::Display for CityWeather {
 impl CityWeather {
     pub fn get_coordinates(&self) -> String {
         self.city_data
-            .iter()
-            .map(|(_, weather_station)| {
+            .values()
+            .map(|weather_station| {
                 format!("{},{}", weather_station.latitude, weather_station.longitude)
             })
             .collect::<Vec<String>>()

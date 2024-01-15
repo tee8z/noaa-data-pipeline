@@ -781,6 +781,7 @@ dependencies = [
  "log",
  "parquet",
  "parquet_derive",
+ "regex",
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",

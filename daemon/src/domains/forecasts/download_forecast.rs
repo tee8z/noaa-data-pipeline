@@ -2,18 +2,28 @@ use crate::Type::{
     Liquid, Maximum, MaximumRelative, Minimum, MinimumRelative,
     ProbabilityOfPrecipitationWithin12Hours, Sustained, Wind,
 };
-use crate::{fetch_xml, CityWeather, DataReading, Dwml, Location, Units};
+use crate::{
+    fetch_xml, split_cityweather, CityWeather, DataReading, Dwml, Location, Point, RateLimiter,
+    Units, WeatherStation,
+};
 use anyhow::{anyhow, Error};
+use core::time::Duration as StdDuration;
 use parquet::basic::LogicalType;
 use parquet::{
     basic::{Repetition, Type as PhysicalType},
     schema::types::Type,
 };
 use parquet_derive::ParquetRecordWriter;
-use slog::{debug, Logger};
+use regex::bytes::Regex;
+use serde_xml_rs::from_str;
+use slog::{debug, error, info, Logger};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{collections::HashMap, ops::Add};
 use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime};
+use tokio::sync::mpsc;
+use tokio::sync::Mutex;
+use tokio::time::sleep;
 /*
 More Options defined  here:
 TODO: pull list down from the website and request everything
@@ -31,6 +41,7 @@ Minimum Relative Humidity 	minrh
 #[derive(Debug, Clone)]
 pub struct WeatherForecast {
     pub station_id: String,
+    pub station_name: String,
     pub latitude: String,
     pub longitude: String,
     pub generated_at: OffsetDateTime,
@@ -55,6 +66,7 @@ pub struct WeatherForecast {
 #[derive(ParquetRecordWriter, Debug)]
 pub struct Forecast {
     pub station_id: String,
+    pub station_name: String,
     pub latitude: f64,
     pub longitude: f64,
     pub generated_at: String,
@@ -81,6 +93,7 @@ impl TryFrom<WeatherForecast> for Forecast {
     fn try_from(val: WeatherForecast) -> Result<Self, Self::Error> {
         let parquet = Forecast {
             station_id: val.station_id,
+            station_name: String::from(""),
             latitude: val.latitude.parse::<f64>()?,
             longitude: val.longitude.parse::<f64>()?,
             generated_at: val
@@ -119,6 +132,12 @@ pub fn create_forecast_schema() -> Type {
     let station_id = Type::primitive_type_builder("station_id", PhysicalType::BYTE_ARRAY)
         .with_logical_type(Some(LogicalType::String))
         .with_repetition(Repetition::REQUIRED)
+        .build()
+        .unwrap();
+
+    let station_name = Type::primitive_type_builder("station_name", PhysicalType::BYTE_ARRAY)
+        .with_repetition(Repetition::REQUIRED)
+        .with_logical_type(Some(LogicalType::String))
         .build()
         .unwrap();
 
@@ -243,6 +262,7 @@ pub fn create_forecast_schema() -> Type {
     let schema = Type::group_type_builder("forecast")
         .with_fields(vec![
             Arc::new(station_id),
+            Arc::new(station_name),
             Arc::new(latitude),
             Arc::new(longitude),
             Arc::new(generated_at),
@@ -293,79 +313,88 @@ pub struct TimeWindow {
     pub time_interval: Duration,
 }
 
+//***THIS IS WHERE THE FLATTENING OF THE DATA OCCURS, IF THERE ARE ISSUES IN THE END DATA START HERE TO SOLVE***
 impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
     type Error = anyhow::Error;
     fn try_from(raw_data: Dwml) -> Result<Self, Self::Error> {
-        println!("trying to convert into flatted weather forecast format");
-
         let mut time_layouts: HashMap<String, Vec<TimeRange>> = HashMap::new();
-        for time_layout in raw_data.data.time_layout {
+        for time_layout in raw_data.data.time_layout.clone() {
             let time_range: Vec<TimeRange> = time_layout.to_time_ranges()?;
             time_layouts.insert(time_range.first().unwrap().key.clone(), time_range);
         }
 
         // The `location-key` is the key for each hashmap entry
         let mut weather: HashMap<String, Vec<WeatherForecast>> = HashMap::new();
-        let generated_at = OffsetDateTime::parse(&raw_data.head.product.creation_date, &Rfc3339)?;
+        let generated_at = get_generated_at(&raw_data);
 
         raw_data.data.location.iter().for_each(|location| {
             let weather_forecast =
                 get_forecasts_ranges(location, generated_at, time_layouts.clone());
-            println!("inserting into weather_data: {:?}", weather_forecast);
             weather.insert(location.location_key.clone(), weather_forecast);
         });
 
         for parameter_point in raw_data.data.parameters {
             let location_key = parameter_point.applicable_location.clone();
             let weather_data = weather.get_mut(&location_key).unwrap();
-            println!("found weather_data: {:?}", weather_data);
-            for temp in parameter_point.temperature.clone() {
-                // We want this to panic, we should never have a time layout that doesn't exist in the map
-                let temp_times = time_layouts.get(&temp.time_layout).unwrap();
-                add_data(weather_data, temp_times, &temp)?;
+
+            if let Some(temps) = parameter_point.temperature {
+                for temp in temps {
+                    // We want this to panic, we should never have a time layout that doesn't exist in the map
+                    let temp_times = time_layouts.get(&temp.time_layout).unwrap();
+                    add_data(weather_data, temp_times, &temp)?;
+                }
             }
 
-            for humidity in parameter_point.humidity.clone() {
-                let humidity_times = time_layouts.get(&humidity.time_layout).unwrap();
-                add_data(weather_data, humidity_times, &humidity)?;
+            if let Some(humidities) = parameter_point.humidity {
+                for humidity in humidities {
+                    let humidity_times = time_layouts.get(&humidity.time_layout).unwrap();
+                    add_data(weather_data, humidity_times, &humidity)?;
+                }
             }
 
-            let precipitation_times = time_layouts
-                .get(&parameter_point.precipitation.time_layout)
-                .unwrap();
-            add_data(
-                weather_data,
-                precipitation_times,
-                &parameter_point.precipitation,
-            )?;
+            if let Some(precipitation) = parameter_point.precipitation {
+                let precipitation_times = time_layouts.get(&precipitation.time_layout).unwrap();
+                add_data(weather_data, precipitation_times, &precipitation)?;
+            }
 
-            let probability_of_precipitation_times = time_layouts
-                .get(&parameter_point.probability_of_precipitation.time_layout)
-                .unwrap();
-            add_data(
-                weather_data,
-                probability_of_precipitation_times,
-                &parameter_point.probability_of_precipitation,
-            )?;
+            if let Some(probability_of_precipitation) = parameter_point.probability_of_precipitation
+            {
+                let probability_of_precipitation_times = time_layouts
+                    .get(&probability_of_precipitation.time_layout)
+                    .unwrap();
+                add_data(
+                    weather_data,
+                    probability_of_precipitation_times,
+                    &probability_of_precipitation,
+                )?;
+            }
 
-            let wind_direction_times = time_layouts
-                .get(&parameter_point.wind_direction.time_layout)
-                .unwrap();
-            add_data(
-                weather_data,
-                wind_direction_times,
-                &parameter_point.wind_direction,
-            )?;
+            if let Some(wind_direction) = parameter_point.wind_direction {
+                let wind_direction_times = time_layouts.get(&wind_direction.time_layout).unwrap();
+                add_data(weather_data, wind_direction_times, &wind_direction)?;
+            }
 
-            let wind_speed_times = time_layouts
-                .get(&parameter_point.wind_speed.time_layout)
-                .unwrap();
-            add_data(weather_data, wind_speed_times, &parameter_point.wind_speed)?;
-
-            println!("updated weather_data: {:?}", weather_data);
+            if let Some(wind_speed) = parameter_point.wind_speed {
+                let wind_speed_times = time_layouts.get(&wind_speed.time_layout).unwrap();
+                add_data(weather_data, wind_speed_times, &wind_speed)?;
+            }
         }
         Ok(weather)
     }
+}
+
+fn get_generated_at(raw_data: &Dwml) -> OffsetDateTime {
+    if let Some(head) = raw_data.head.clone() {
+        if let Some(product) = head.product {
+            if let Some(creation_date) = product.creation_date {
+                return match OffsetDateTime::parse(&creation_date, &Rfc3339) {
+                    Ok(time) => time,
+                    Err(_) => OffsetDateTime::now_utc(),
+                };
+            }
+        }
+    }
+    OffsetDateTime::now_utc()
 }
 
 // weather_data is always in 3 hour intervals, time_ranges can be in 3,6,12,24 ranges
@@ -378,6 +407,7 @@ fn add_data(
         let mut time_iter = time_ranges.iter();
         let mut current_time = time_iter.next().unwrap();
         let mut time_interval_index: Option<usize> = None;
+
         // This is an important time comparison, if there are more None's than expected this may be the source
         while current_time.start_time <= current_data.begin_time {
             time_interval_index = if let Some(mut interval) = time_interval_index {
@@ -396,56 +426,82 @@ fn add_data(
         match data.reading_type {
             Liquid => {
                 if let Some(index) = time_interval_index {
-                    current_data.liquid_precipitation_amt =
-                        Some((data.value.get(index)).unwrap().parse::<f64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<f64>() {
+                            current_data.liquid_precipitation_amt = Some(parsed);
+                        }
+                    }
                 }
                 current_data.liquid_precipitation_unit_code = data.units.to_string();
             }
             Maximum => {
                 if let Some(index) = time_interval_index {
-                    current_data.max_temp = Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.max_temp = Some(parsed);
+                        }
+                    }
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
             MaximumRelative => {
                 if let Some(index) = time_interval_index {
-                    current_data.relative_humidity_max =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.relative_humidity_max = Some(parsed);
+                        }
+                    }
                 }
                 current_data.relative_humidity_unit_code = data.units.to_string();
             }
             Minimum => {
                 if let Some(index) = time_interval_index {
-                    current_data.min_temp = Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.min_temp = Some(parsed);
+                        }
+                    }
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
             MinimumRelative => {
                 if let Some(index) = time_interval_index {
-                    current_data.relative_humidity_min =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.relative_humidity_min = Some(parsed);
+                        }
+                    }
                 }
                 current_data.relative_humidity_unit_code = data.units.to_string();
             }
             Sustained => {
                 if let Some(index) = time_interval_index {
-                    current_data.wind_speed =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.wind_speed = Some(parsed);
+                        }
+                    }
                 }
                 current_data.wind_speed_unit_code = data.units.to_string();
             }
             ProbabilityOfPrecipitationWithin12Hours => {
                 if let Some(index) = time_interval_index {
-                    current_data.twelve_hour_probability_of_precipitation =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.twelve_hour_probability_of_precipitation = Some(parsed);
+                        }
+                    }
                 }
                 current_data.twelve_hour_probability_of_precipitation_unit_code =
                     data.units.to_string();
             }
             Wind => {
                 if let Some(index) = time_interval_index {
-                    current_data.wind_direction =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.wind_direction = Some(parsed);
+                        }
+                    }
                 }
                 current_data.wind_direction_unit_code = data.units.to_string();
             }
@@ -454,39 +510,219 @@ fn add_data(
     Ok(())
 }
 
+pub async fn fetch_forecast_with_retry(
+    logger: &Logger,
+    tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>>,
+    mut url: String,
+    max_retries: usize,
+    city_weather: &CityWeather,
+    rate_limit: Arc<Mutex<RateLimiter>>,
+) -> Result<(), Error> {
+    let mut retries = 0;
+    loop {
+        match fetch_xml(logger, url.as_str(), rate_limit.clone()).await {
+            Ok(xml) => {
+                let mut bad_coordinate = Point::default();
+                let converted_xml: Dwml = match from_str(&xml) {
+                    Ok(xml) => xml,
+                    Err(err) => {
+                        if xml.contains("is not on an NDFD grid") {
+                            bad_coordinate = find_bad_points(xml.clone());
+                        }
+                        error!(
+                            logger,
+                            "error converting xml: {} \n raw string: {}", err, xml
+                        );
+                        Dwml::default()
+                    }
+                };
+                if converted_xml == Dwml::default() {
+                    info!(logger, "no current forecast xml found, skipping converting");
+                    if let Err(err) = tx.send(Ok(HashMap::new())).await {
+                        error!(logger, "Error sending result through channel: {}", err);
+                        return Ok(());
+                    }
+                    if bad_coordinate != Point::default() {
+                        url = updated_url(bad_coordinate.clone(), &city_weather);
+                        info!(
+                            logger,
+                            "had a bad coordinate {}, trying the url again with it removed",
+                            bad_coordinate
+                        );
+                        retries += 1;
+                        continue;
+                    }
+                    return Ok(());
+                }
+                let weather_with_stations = add_station_ids(city_weather, converted_xml);
+                let current_forecast_data: HashMap<String, Vec<WeatherForecast>> =
+                    match weather_with_stations.try_into() {
+                        Ok(weather) => weather,
+                        Err(err) => {
+                            error!(logger, "error converting to Forecast: {}", err);
+
+                            HashMap::new()
+                        }
+                    };
+                if current_forecast_data.is_empty() {
+                    info!(logger, "no current forecast data found");
+                    return Ok(());
+                }
+                // Send the result through the channel
+                if let Err(err) = tx.send(Ok(current_forecast_data)).await {
+                    error!(logger, "Error sending result through channel: {}", err);
+                }
+
+                return Ok(());
+            }
+            Err(err) => {
+                if retries >= max_retries {
+                    // Send the error through the channel
+                    if let Err(err) = tx.send(Err(err)).await {
+                        error!(logger, "Error sending error through channel: {}", err);
+                    }
+
+                    return Ok(());
+                }
+                retries += 1;
+                // Log the error and retry after a delay
+                error!(logger, "Error fetching XML (retry {}): {}", retries, err);
+                sleep(StdDuration::from_secs(5)).await;
+            }
+        }
+    }
+}
+
+fn find_bad_points(xml: String) -> Point {
+    let re = Regex::new(r#"latitude "(.*?)" longitude "(.*?)"#).unwrap();
+    let mut point = Point {
+        latitude: String::from(""),
+        longitude: String::from(""),
+    };
+    if let Some(captures) = re.captures(&xml.as_bytes()) {
+        if let (Some(latitude), Some(longitude)) = (captures.get(1), captures.get(2)) {
+            if let Ok(latitude_str) = std::str::from_utf8(latitude.as_bytes()) {
+                if let Ok(longitude_str) = std::str::from_utf8(longitude.as_bytes()) {
+                    let latitude_value = latitude_str.to_string();
+                    let longitude_value = longitude_str.to_string();
+                    point.latitude = latitude_value;
+                    point.longitude = longitude_value;
+                }
+            }
+        }
+    }
+    point
+}
+
+pub fn updated_url(bad_coordinate: Point, city_weather: &CityWeather) -> String {
+    let modified_map: HashMap<String, WeatherStation> = city_weather
+        .city_data
+        .iter()
+        .filter(|&(_, v)| {
+            v.latitude == bad_coordinate.latitude && v.longitude == bad_coordinate.longitude
+        })
+        .map(|(k, v)| {
+            (
+                k.clone(),
+                WeatherStation {
+                    station_id: v.station_id.clone(),
+                    latitude: v.latitude.clone(),
+                    longitude: v.longitude.clone(),
+                    station_name: v.station_name.clone(),
+                },
+            )
+        })
+        .collect();
+    let coordinates = modified_map
+        .values()
+        .map(|weather_station| {
+            format!("{},{}", weather_station.latitude, weather_station.longitude)
+        })
+        .collect::<Vec<String>>()
+        .join("%20");
+    let current_time = OffsetDateTime::now_utc();
+    let format_description = Rfc3339;
+    let now = current_time.format(&format_description).unwrap();
+    // Define the duration of one week (7 days)
+    let one_week_duration = Duration::weeks(1);
+    let one_week_from_now = current_time.add(one_week_duration);
+    let one_week = one_week_from_now.format(&format_description).unwrap();
+    format!("https://graphical.weather.gov/xml/sample_products/browser_interface/ndfdXMLclient.php?listLatLon={}&product=time-series&begin={}&end={}&Unit=e&maxt=maxt&mint=mint&wspd=wspd&wdir=wdir&pop12=pop12&qpf=qpf&maxrh=maxrh&minrh=minrh", coordinates,now,one_week)
+}
+
 pub async fn get_forecasts(
     logger: &Logger,
     city_weather: &CityWeather,
+    rate_limiter: Arc<Mutex<RateLimiter>>,
 ) -> Result<Vec<Forecast>, Error> {
-    let mut forecast_data: HashMap<String, Vec<WeatherForecast>> = HashMap::new();
+    let split_maps = split_cityweather(city_weather.clone(), 50);
 
-    //TODO: call 200 stations at a time, max allowed
-    let url = get_url(city_weather);
-    let raw_xml = fetch_xml(logger, &url).await?;
-    debug!(logger.clone(), "raw xml: {}", raw_xml);
+    let (tx, mut rx) =
+        mpsc::channel::<Result<HashMap<String, Vec<WeatherForecast>>, Error>>(split_maps.len());
 
-    let converted_xml: Dwml = serde_xml_rs::from_str(&raw_xml)?;
-    let weather_with_stations = add_station_ids(city_weather, converted_xml);
-    debug!(logger.clone(), "converted xml: {:?}", weather_with_stations);
+    let max_retries = 3;
+    let request_counter = Arc::new(AtomicUsize::new(split_maps.len()));
 
-    let current_forecast_data: HashMap<String, Vec<WeatherForecast>> =
-        weather_with_stations.try_into()?;
+    for city_weather in split_maps {
+        let logger = logger.clone();
+        let tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>> = tx.clone();
+        let url = get_url(&city_weather);
+        let max_retries = max_retries;
+        let rate_limiter_cpy = Arc::clone(&rate_limiter);
 
-    debug!(
-        logger.clone(),
-        "current_forecast_data: {:?}", current_forecast_data
-    );
+        let counter_clone = Arc::clone(&request_counter);
+        tokio::spawn(async move {
+            match fetch_forecast_with_retry(
+                &logger,
+                tx,
+                url,
+                max_retries,
+                &city_weather,
+                rate_limiter_cpy,
+            )
+            .await
+            {
+                Ok(_) => {
+                    counter_clone.fetch_sub(1, Ordering::Relaxed);
+                }
+                Err(_) => {
+                    counter_clone.fetch_sub(1, Ordering::Relaxed);
+                }
+            }
+        });
+    }
 
-    //TODO: add each 200 parsed data into the HashMap (should be keyed on station_id and then a list of each weather reading per day)
-    forecast_data.extend(current_forecast_data);
+    let mut forecast_data = HashMap::new();
+    while let Some(result) = rx.recv().await {
+        match result {
+            Ok(data) => {
+                info!(logger, "Found more forecast data for: {:?}", data.keys());
+                forecast_data.extend(data);
+            }
+            Err(err) => {
+                error!(logger, "Error fetching forecast data: {}", err);
+            }
+        }
+        let final_value = request_counter.load(Ordering::Relaxed);
 
+        if final_value > 0 {
+            info!(logger, "waiting for next batch of weather data");
+        } else {
+            info!(logger, "all request have completed, moving on");
+            break;
+        }
+    }
+
+    info!(logger, "done waiting for data, contining");
     let mut forecasts = vec![];
     for all_forecasts in forecast_data.values() {
         for weather_forecats in all_forecasts {
             let current = weather_forecats.clone();
             debug!(logger.clone(), "current weather forecast: {:?}", current);
-            let forecast: Forecast = current.try_into()?;
+            let mut forecast: Forecast = current.try_into()?;
             debug!(logger.clone(), "parquet format forecast: {:?}", forecast);
+            let city = city_weather.city_data.get(&forecast.station_id).unwrap();
+            forecast.station_name = city.station_name.clone();
             forecasts.push(forecast)
         }
     }
@@ -505,8 +741,8 @@ fn get_forecasts_ranges(
         .map(|(_, time_ranges)| time_ranges.first().unwrap().start_time)
         .collect();
 
-    first_start_time_only.sort_by(|a, b| a.cmp(&b));
-    let first_time = first_start_time_only.first().unwrap().clone();
+    first_start_time_only.sort();
+    let first_time = *first_start_time_only.first().unwrap();
 
     let mut last_start_time_only: Vec<OffsetDateTime> = time_layouts
         .iter()
@@ -514,10 +750,9 @@ fn get_forecasts_ranges(
         .map(|(_, time_ranges)| time_ranges.last().unwrap().start_time)
         .collect();
 
-    last_start_time_only.sort_by(|a, b| a.cmp(&b));
-    let last_time = last_start_time_only.last().unwrap().clone();
-    println!("first_time: {:?}", first_time);
-    println!("last_time: {:?}", last_time);
+    last_start_time_only.sort();
+    let last_time = *last_start_time_only.last().unwrap();
+
     let time_window = TimeWindow {
         first_time,
         last_time,
@@ -531,6 +766,7 @@ fn get_forecasts_ranges(
 
         let weather_forecast = WeatherForecast {
             station_id: location.station_id.clone().unwrap_or_default(),
+            station_name: String::from(""),
             latitude: location.point.latitude.clone(),
             longitude: location.point.longitude.clone(),
             generated_at,
@@ -574,12 +810,7 @@ fn add_station_ids(city_weather: &CityWeather, mut converted_xml: Dwml) -> Dwml 
                 .city_data
                 .clone()
                 .values()
-                // xml files always provide these to 2 decimal places, make sure to match on that percision
-                .find(|val| {
-                    val.latitude.parse::<f64>().unwrap() == latitude.parse::<f64>().unwrap()
-                        && val.longitude.parse::<f64>().unwrap()
-                            == longitude.parse::<f64>().unwrap()
-                })
+                .find(|val| compare_coordinates(val, &latitude, &longitude))
                 .map(|val| val.station_id.clone());
 
             Location {
@@ -592,6 +823,14 @@ fn add_station_ids(city_weather: &CityWeather, mut converted_xml: Dwml) -> Dwml 
     converted_xml
 }
 
+// forecast xml files always provide these to 2 decimal places, make sure to match on that percision
+fn compare_coordinates(weather_station: &WeatherStation, latitude: &str, longitude: &str) -> bool {
+    let station_lat = weather_station.get_latitude();
+    let station_long = weather_station.get_longitude();
+
+    station_lat == latitude && station_long == longitude
+}
+
 fn get_url(city_weather: &CityWeather) -> String {
     let current_time = OffsetDateTime::now_utc();
     let format_description = Rfc3339;
@@ -600,5 +839,5 @@ fn get_url(city_weather: &CityWeather) -> String {
     let one_week_duration = Duration::weeks(1);
     let one_week_from_now = current_time.add(one_week_duration);
     let one_week = one_week_from_now.format(&format_description).unwrap();
-    format!("https://graphical.weather.gov/xml/sample_products/browser_interface/ndfdXMLclient.php?listLatLon={}&product=time-series&begin={}&end={}&Unit=e&maxt=maxt&mint=mint&wspd=wspd&wdir=wdir&pop12=pop12&qpf=qpf&maxrh=maxrh&minrh=minrh", city_weather.get_coordinates(),now,one_week)
+    format!("https://graphical.weather.gov/xml/sample_products/browser_interface/ndfdXMLclient.php?listLatLon={}&product=time-series&begin={}&end={}&Unit=e&maxt=maxt&mint=mint&wspd=wspd&wdir=wdir&pop12=pop12&qpf=qpf&maxrh=maxrh&minrh=minrh", city_weather.get_coordinates_url(),now,one_week)
 }

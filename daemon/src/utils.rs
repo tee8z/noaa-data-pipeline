@@ -1,14 +1,21 @@
-use std::{env, fs::File, io::Write};
-
 use anyhow::{anyhow, Error};
 use clap::Parser;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
-use slog::{debug, o, Drain, Level, Logger};
-
-#[derive(Parser)]
+use slog::{debug, error, info, o, Drain, Level, Logger};
+use std::{
+    env,
+    fs::{self, File},
+    io::Write,
+    path::Path,
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
+use tokio::sync::Mutex;
+#[derive(Parser, Clone)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
     /// Set the log level
@@ -16,7 +23,7 @@ pub struct Cli {
     pub level: Option<String>,
 
     #[arg(short, long)]
-    pub base_url: Option<String>
+    pub base_url: Option<String>,
 }
 
 pub fn setup_logger(cli: &Cli) -> Logger {
@@ -49,7 +56,65 @@ pub fn setup_logger(cli: &Cli) -> Logger {
     slog::Logger::root(drain, o!("version" => "0.5"))
 }
 
-pub async fn fetch_xml(logger: &Logger, url: &str) -> Result<String, Error> {
+pub struct RateLimiter {
+    capacity: usize,
+    tokens: f64,
+    last_refill: Instant,
+    refill_rate: f64,
+}
+
+impl RateLimiter {
+    pub fn new(capacity: usize, refill_rate: f64) -> Self {
+        RateLimiter {
+            capacity,
+            tokens: capacity as f64,
+            last_refill: Instant::now(),
+            refill_rate,
+        }
+    }
+
+    fn refill_tokens(&mut self) {
+        let now = Instant::now();
+        let elapsed_time = now.duration_since(self.last_refill).as_secs_f64();
+        let tokens_to_add = elapsed_time * self.refill_rate;
+
+        self.tokens += tokens_to_add.min(self.capacity as f64);
+        self.last_refill = now;
+    }
+
+    fn try_acquire(&mut self, tokens: f64) -> bool {
+        let mut retries = 0;
+
+        loop {
+            self.refill_tokens();
+
+            if tokens <= self.tokens {
+                self.tokens -= tokens;
+                return true;
+            } else {
+                if retries >= 3 {
+                    // Maximum number of retries reached
+                    return false;
+                }
+
+                retries += 1;
+                thread::sleep(Duration::from_secs(20));
+            }
+        }
+    }
+}
+
+pub async fn fetch_xml(
+    logger: &Logger,
+    url: &str,
+    rate_limiter: Arc<Mutex<RateLimiter>>,
+) -> Result<String, Error> {
+    let mut limiter = rate_limiter.lock().await;
+    if !limiter.try_acquire(1.0) {
+        // This happens after waitin and trying 3 times
+        return Err(anyhow!("Rate limit exceeded after retries"));
+    }
+
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
     let client = ClientBuilder::new(Client::builder().user_agent("fetching_data/1.0").build()?)
         .with(RetryTransientMiddleware::new_with_policy(retry_policy))
@@ -67,7 +132,16 @@ pub async fn fetch_xml(logger: &Logger, url: &str) -> Result<String, Error> {
     }
 }
 
-pub async fn fetch_xml_zip(logger: &Logger, url: &str) -> Result<File, Error> {
+pub async fn fetch_xml_zip(
+    logger: &Logger,
+    url: &str,
+    rate_limiter: Arc<Mutex<RateLimiter>>,
+) -> Result<File, Error> {
+    let mut limiter = rate_limiter.lock().await;
+    if !limiter.try_acquire(1.0) {
+        // This happens after waitin and trying 3 times
+        return Err(anyhow!("Rate limit exceeded after retries"));
+    }
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
     let client = ClientBuilder::new(Client::builder().user_agent("fetching_data/1.0").build()?)
         .with(RetryTransientMiddleware::new_with_policy(retry_policy))
@@ -103,4 +177,20 @@ pub fn get_full_path(relative_path: String) -> String {
 
     // Convert the `PathBuf` to a `String` if needed
     current_dir.to_string_lossy().to_string()
+}
+
+pub fn create_folder(root_path: &str, logger: &Logger) {
+    let path = Path::new(root_path);
+
+    if !path.exists() || !path.is_dir() {
+        // Create the folder if it doesn't exist
+        if let Err(err) = fs::create_dir(path) {
+            error!(logger, "Error creating folder: {}", err);
+            // Handle the error as needed
+        } else {
+            info!(logger, "Folder created: {}", root_path);
+        }
+    } else {
+        info!(logger, "Folder already exists: {}", root_path);
+    }
 }

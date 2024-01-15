@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Error};
 use parquet::{
-    basic::{Repetition, Type as PhysicalType, LogicalType},
+    basic::{LogicalType, Repetition, Type as PhysicalType},
     schema::types::Type,
 };
 use parquet_derive::ParquetRecordWriter;
-use slog::{debug, Logger};
+use slog::{debug, error, Logger};
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
@@ -12,9 +12,10 @@ use std::{
     sync::Arc,
 };
 use time::{format_description::well_known::Rfc2822, macros::format_description, OffsetDateTime};
+use tokio::sync::Mutex;
 use zip::ZipArchive;
 
-use crate::{fetch_xml_zip, CityWeather, CurrentObservation, Units};
+use crate::{fetch_xml_zip, CityWeather, CurrentObservation, RateLimiter, Units};
 
 #[derive(Clone)]
 pub struct CurrentWeather {
@@ -46,9 +47,9 @@ impl TryFrom<CurrentObservation> for CurrentWeather {
             temperature_value: val.temp_f.parse::<f64>()?,
             temperature_unit_code: Units::Fahrenheit.to_string(),
             relative_humidity: val.relative_humidity.parse::<i64>()?,
-            relative_humidity_unit_code:Units::Percent.to_string(),
+            relative_humidity_unit_code: Units::Percent.to_string(),
             wind_direction: val.wind_degrees.parse::<i64>()?,
-            wind_direction_unit_code:Units::DegreesTrue.to_string(),
+            wind_direction_unit_code: Units::DegreesTrue.to_string(),
             wind_speed: val.wind_kt.parse::<i64>()?,
             wind_speed_unit_code: Units::Knots.to_string(),
             dewpoint_value: val.dewpoint_f.parse::<f64>()?,
@@ -60,6 +61,7 @@ impl TryFrom<CurrentObservation> for CurrentWeather {
 #[derive(Debug, ParquetRecordWriter)]
 pub struct Observation {
     pub station_id: String,
+    pub station_name: String,
     pub latitude: f64,
     pub longitude: f64,
     pub generated_at: String,
@@ -82,6 +84,7 @@ impl TryFrom<CurrentWeather> for Observation {
             format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]Z");
         let parquet = Observation {
             station_id: val.station_id,
+            station_name: String::from(""),
             latitude: val.latitude,
             longitude: val.longitude,
             generated_at: val
@@ -105,6 +108,12 @@ impl TryFrom<CurrentWeather> for Observation {
 
 pub fn create_observation_schema() -> Type {
     let station_id = Type::primitive_type_builder("station_id", PhysicalType::BYTE_ARRAY)
+        .with_repetition(Repetition::REQUIRED)
+        .with_logical_type(Some(LogicalType::String))
+        .build()
+        .unwrap();
+
+    let station_name = Type::primitive_type_builder("station_name", PhysicalType::BYTE_ARRAY)
         .with_repetition(Repetition::REQUIRED)
         .with_logical_type(Some(LogicalType::String))
         .build()
@@ -189,6 +198,7 @@ pub fn create_observation_schema() -> Type {
     let schema = Type::group_type_builder("observation")
         .with_fields(vec![
             Arc::new(station_id),
+            Arc::new(station_name),
             Arc::new(latitude),
             Arc::new(longitude),
             Arc::new(generated_at),
@@ -212,16 +222,19 @@ pub fn create_observation_schema() -> Type {
 pub async fn get_observations(
     logger: &Logger,
     city_weather: &CityWeather,
+    rate_limit: Arc<Mutex<RateLimiter>>,
 ) -> Result<Vec<Observation>, Error> {
     let url = "https://w1.weather.gov/xml/current_obs/all_xml.zip";
-    let zip_file = fetch_xml_zip(logger, url).await?;
+    let zip_file = fetch_xml_zip(logger, url, rate_limit).await?;
     let find_file_indexies =
         find_file_indexes_for_stations(zip_file.try_clone()?, city_weather.get_station_ids())?;
     let current_weather = parse_weather_data(logger, zip_file, find_file_indexies)?;
     let mut observations = vec![];
     for value in current_weather.values() {
         let current = value.clone();
-        let observation: Observation = current.try_into()?;
+        let mut observation: Observation = current.try_into()?;
+        let city = city_weather.city_data.get(&observation.station_id).unwrap();
+        observation.station_name = city.station_name.clone();
         observations.push(observation)
     }
     Ok(observations)
@@ -255,10 +268,17 @@ fn parse_weather_data(
         let mut entry = archive.by_index(file_index)?;
         let mut content = String::new();
         entry.read_to_string(&mut content)?;
-        println!("raw string: {}", content);
-        let converted_xml: CurrentObservation = serde_xml_rs::from_str(&content)?;
+        let converted_xml: CurrentObservation = match serde_xml_rs::from_str(&content) {
+            Ok(val) => val,
+            Err(e) => {
+                error!(logger, "error converting the raw content: {}", e);
+                CurrentObservation::default()
+            }
+        };
         debug!(logger.clone(), "converted xml: {:?}", converted_xml);
-        current_weather.insert(converted_xml.station_id.clone(), converted_xml.try_into()?);
+        if converted_xml != CurrentObservation::default() {
+            current_weather.insert(converted_xml.station_id.clone(), converted_xml.try_into()?);
+        }
     }
     Ok(current_weather)
 }

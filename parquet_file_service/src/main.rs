@@ -2,17 +2,17 @@ use axum::{
     body::StreamBody,
     extract::{DefaultBodyLimit, Multipart, Path},
     http::{HeaderValue, Request, StatusCode},
-    response::{IntoResponse, Html},
+    response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
 };
-
 use hyper::{
     header::{CONTENT_DISPOSITION, CONTENT_TYPE},
     Body, HeaderMap, Method,
 };
 use serde::Serialize;
 use std::net::SocketAddr;
+use std::{fs as StdFs, path::Path as FilePath};
 use tokio::{
     fs::{self, File},
     io::AsyncWriteExt,
@@ -23,8 +23,12 @@ use tower_http::{
     services::{ServeDir, ServeFile},
 };
 
+const UPLOADS_DIRECTORY: &str = "weather_data";
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    create_folder(&format!("./{}", UPLOADS_DIRECTORY));
+
     let address = SocketAddr::from(([127, 0, 0, 1], 9100));
     println!("listening on http://{}", address);
     let app = app(address.to_string());
@@ -34,15 +38,31 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn index(server_address: String) -> String  {
-    let file_content = fs::read_to_string("./ui/index.html").await.expect("Unable to read index.html");
-    let updated_content = file_content.replace("{SERVER_ADDRESS}", &format!("http://{}",server_address));
+fn create_folder(root_path: &str) {
+    let path = FilePath::new(root_path);
 
-    updated_content
+    if !path.exists() || !path.is_dir() {
+        // Create the folder if it doesn't exist
+        if let Err(err) = StdFs::create_dir(path) {
+            eprintln!("Error creating folder: {}", err);
+            // Handle the error as needed
+        } else {
+            println!("Folder created: {}", root_path);
+        }
+    } else {
+        println!("Folder already exists: {}", root_path);
+    }
+}
+
+async fn index(server_address: String) -> String {
+    let file_content = fs::read_to_string("./ui/index.html")
+        .await
+        .expect("Unable to read index.html");
+    file_content.replace("{SERVER_ADDRESS}", &format!("http://{}", server_address))
 }
 
 async fn index_handler(server_address: String) -> Html<String> {
-   Html(index(server_address.clone()).await)
+    Html(index(server_address.clone()).await)
 }
 
 pub fn app(server_address: String) -> Router {
@@ -65,8 +85,6 @@ pub fn app(server_address: String) -> Router {
         .fallback_service(serve_dir)
         .layer(cors)
 }
-
-const UPLOADS_DIRECTORY: &str = "weather_data";
 
 async fn download(
     Path(filename): Path<String>,

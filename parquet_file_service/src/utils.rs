@@ -42,7 +42,7 @@ pub struct Cli {
     #[arg(short, long)]
     pub port: Option<String>,
 
-    /// Port to listen on (default: http://127.0.0.1:9100)
+    /// Url UI should hit for the backend (default: http://127.0.0.1:9100)
     #[arg(short, long)]
     pub remote_url: Option<String>,
 

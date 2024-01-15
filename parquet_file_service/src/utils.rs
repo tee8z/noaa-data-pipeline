@@ -6,21 +6,20 @@ use std::{
 };
 
 use clap::{command, Parser};
-use slog::{o, Drain, Level, Logger};
+use slog::{o, Drain, Level, Logger, error, info};
 
-pub fn create_folder(root_path: &str) {
+pub fn create_folder(logger: &Logger, root_path: &str) {
     let path = Path::new(root_path);
 
     if !path.exists() || !path.is_dir() {
         // Create the folder if it doesn't exist
         if let Err(err) = fs::create_dir(path) {
-            eprintln!("Error creating folder: {}", err);
-            // Handle the error as needed
+            error!(logger, "error creating folder: {}", err);
         } else {
-            println!("Folder created: {}", root_path);
+            info!(logger, "folder created: {}", root_path);
         }
     } else {
-        println!("Folder already exists: {}", root_path);
+        info!(logger, "folder already exists: {}", root_path);
     }
 }
 
@@ -37,7 +36,7 @@ pub struct Cli {
 
     /// Host to listen at (default: 120.0.0.1)
     #[arg(short, long)]
-    pub host: Option<String>,
+    pub domain: Option<String>,
 
     /// Port to listen on (default: 9100)
     #[arg(short, long)]
@@ -45,7 +44,7 @@ pub struct Cli {
 
     /// Path to stored parquet files that have been uploaded (default: ./weather_data)
     #[arg(short, long)]
-    pub data_dir: Option<String>,
+    pub weather_dir: Option<String>,
 
     /// Path to files used to make the browser UI (default: ./ui)
     #[arg(short, long)]

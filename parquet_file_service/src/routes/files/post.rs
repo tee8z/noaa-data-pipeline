@@ -18,16 +18,6 @@ pub async fn upload(
         return Err((StatusCode::BAD_REQUEST, "Invalid file".to_owned()));
     }
     while let Some(field) = multipart.next_field().await.unwrap() {
-        let name = field
-            .name()
-            .ok_or_else(|| {
-                error!(state.logger, "error getting file's name, missing");
-                (
-                    StatusCode::BAD_REQUEST,
-                    "Missing filename in multipart".to_string(),
-                )
-            })?
-            .to_string();
         let data = field.bytes().await.map_err(|err| {
             error!(state.logger, "error getting file's bytes: {}", err);
             (
@@ -39,7 +29,7 @@ pub async fn upload(
         info!(
             state.logger,
             "length of `{}` is {} mb",
-            name,
+            file_name,
             bytes_to_mb(data.len())
         );
         let path = std::path::Path::new(&state.data_dir).join(&file_name);

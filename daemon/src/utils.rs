@@ -40,11 +40,11 @@ pub struct Cli {
 
     /// How quickly the rate limiter will release tokens (default: 15 seconds)
     #[arg(short,long)]
-    pub rate_limit_refill_rate: Option<f64>,
+    pub refill_rate: Option<f64>,
 
     /// How man tokens can be used within the refill rate (default: 3)
     #[arg(short,long)]
-    pub rate_limit_capacity: Option<usize>,
+    pub token_capacity: Option<usize>,
 
 }
 
@@ -221,12 +221,12 @@ pub fn create_folder(root_path: &str, logger: &Logger) {
     if !path.exists() || !path.is_dir() {
         // Create the folder if it doesn't exist
         if let Err(err) = fs::create_dir(path) {
-            error!(logger, "Error creating folder: {}", err);
+            error!(logger, "error creating folder: {}", err);
             // Handle the error as needed
         } else {
-            info!(logger, "Folder created: {}", root_path);
+            info!(logger, "folder created: {}", root_path);
         }
     } else {
-        info!(logger, "Folder already exists: {}", root_path);
+        info!(logger, "folder already exists: {}", root_path);
     }
 }

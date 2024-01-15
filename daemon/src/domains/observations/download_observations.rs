@@ -23,15 +23,15 @@ pub struct CurrentWeather {
     pub latitude: f64,
     pub longitude: f64,
     pub generated_at: OffsetDateTime,
-    pub temperature_value: f64,
+    pub temperature_value: Option<f64>,
     pub temperature_unit_code: String,
-    pub relative_humidity: i64,
+    pub relative_humidity: Option<i64>,
     pub relative_humidity_unit_code: String,
-    pub wind_direction: i64,
+    pub wind_direction: Option<i64>,
     pub wind_direction_unit_code: String,
-    pub wind_speed: i64,
+    pub wind_speed: Option<i64>,
     pub wind_speed_unit_code: String,
-    pub dewpoint_value: f64,
+    pub dewpoint_value: Option<f64>,
     pub dewpoint_unit_code: String,
 }
 
@@ -42,17 +42,46 @@ impl TryFrom<CurrentObservation> for CurrentWeather {
             station_id: val.station_id,
             latitude: val.latitude.parse::<f64>()?,
             longitude: val.longitude.parse::<f64>()?,
-            generated_at: OffsetDateTime::parse(&val.observation_time_rfc822, &Rfc2822)
-                .map_err(|e| anyhow!("error parsing observation_time time: {}", e))?,
-            temperature_value: val.temp_f.parse::<f64>()?,
+            generated_at: OffsetDateTime::parse(
+                &val.observation_time_rfc822
+                    .unwrap_or(OffsetDateTime::now_utc().to_string()),
+                &Rfc2822,
+            )
+            .map_err(|e| anyhow!("error parsing observation_time time: {}", e))?,
+            temperature_value: val
+                .temp_f
+                .unwrap_or(String::from(""))
+                .parse::<f64>()
+                .map(|val| Some(val))
+                .unwrap_or(None),
             temperature_unit_code: Units::Fahrenheit.to_string(),
-            relative_humidity: val.relative_humidity.parse::<i64>()?,
+            relative_humidity: val
+                .relative_humidity
+                .unwrap_or(String::from(""))
+                .parse::<i64>()
+                .map(|val| Some(val))
+                .unwrap_or(None),
             relative_humidity_unit_code: Units::Percent.to_string(),
-            wind_direction: val.wind_degrees.parse::<i64>()?,
+            wind_direction: val
+                .wind_degrees
+                .unwrap_or(String::from(""))
+                .parse::<i64>()
+                .map(|val| Some(val))
+                .unwrap_or(None),
             wind_direction_unit_code: Units::DegreesTrue.to_string(),
-            wind_speed: val.wind_kt.parse::<i64>()?,
+            wind_speed: val
+                .wind_kt
+                .unwrap_or(String::from(""))
+                .parse::<i64>()
+                .map(|val| Some(val))
+                .unwrap_or(None),
             wind_speed_unit_code: Units::Knots.to_string(),
-            dewpoint_value: val.dewpoint_f.parse::<f64>()?,
+            dewpoint_value: val
+                .dewpoint_f
+                .unwrap_or(String::from(""))
+                .parse::<f64>()
+                .map(|val| Some(val))
+                .unwrap_or(None),
             dewpoint_unit_code: Units::Fahrenheit.to_string(),
         })
     }
@@ -65,15 +94,15 @@ pub struct Observation {
     pub latitude: f64,
     pub longitude: f64,
     pub generated_at: String,
-    pub temperature_value: f64,
+    pub temperature_value: Option<f64>,
     pub temperature_unit_code: String,
-    pub relative_humidity: i64,
+    pub relative_humidity: Option<i64>,
     pub relative_humidity_unit_code: String,
-    pub wind_direction: i64,
+    pub wind_direction: Option<i64>,
     pub wind_direction_unit_code: String,
-    pub wind_speed: i64,
+    pub wind_speed: Option<i64>,
     pub wind_speed_unit_code: String,
-    pub dewpoint_value: f64,
+    pub dewpoint_value: Option<f64>,
     pub dewpoint_unit_code: String,
 }
 
@@ -136,7 +165,7 @@ pub fn create_observation_schema() -> Type {
         .unwrap();
 
     let temperature_value = Type::primitive_type_builder("temperature_value", PhysicalType::DOUBLE)
-        .with_repetition(Repetition::REQUIRED)
+        .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
 
@@ -148,7 +177,7 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let relative_humidity = Type::primitive_type_builder("relative_humidity", PhysicalType::INT64)
-        .with_repetition(Repetition::REQUIRED)
+        .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
 
@@ -160,7 +189,7 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let wind_direction = Type::primitive_type_builder("wind_direction", PhysicalType::INT64)
-        .with_repetition(Repetition::REQUIRED)
+        .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
 
@@ -172,7 +201,7 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let wind_speed = Type::primitive_type_builder("wind_speed", PhysicalType::INT64)
-        .with_repetition(Repetition::REQUIRED)
+        .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
 
@@ -184,7 +213,7 @@ pub fn create_observation_schema() -> Type {
             .unwrap();
 
     let dewpoint_value = Type::primitive_type_builder("dewpoint_value", PhysicalType::DOUBLE)
-        .with_repetition(Repetition::REQUIRED)
+        .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
 

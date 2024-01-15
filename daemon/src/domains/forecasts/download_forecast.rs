@@ -26,7 +26,6 @@ use tokio::sync::Mutex;
 use tokio::time::sleep;
 /*
 More Options defined  here:
-TODO: pull list down from the website and request everything
 https://graphical.weather.gov/xml/docs/elementInputNames.php
 
 Maximum Temperature 	maxt
@@ -513,14 +512,15 @@ fn add_data(
 pub async fn fetch_forecast_with_retry(
     logger: &Logger,
     tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>>,
-    mut url: String,
+    url: String,
     max_retries: usize,
     city_weather: &CityWeather,
     rate_limit: Arc<Mutex<RateLimiter>>,
 ) -> Result<(), Error> {
     let mut retries = 0;
+    let mut url_update = url;
     loop {
-        match fetch_xml(logger, url.as_str(), rate_limit.clone()).await {
+        match fetch_xml(logger, url_update.as_str(), rate_limit.clone()).await {
             Ok(xml) => {
                 let mut bad_coordinate = Point::default();
                 let converted_xml: Dwml = match from_str(&xml) {
@@ -543,12 +543,24 @@ pub async fn fetch_forecast_with_retry(
                         return Ok(());
                     }
                     if bad_coordinate != Point::default() {
-                        url = updated_url(bad_coordinate.clone(), &city_weather);
+                        url_update = updated_url(bad_coordinate.clone(), &city_weather);
                         info!(
                             logger,
-                            "had a bad coordinate {}, trying the url again with it removed",
-                            bad_coordinate
+                            "had a bad coordinate {}, trying updated url {}",
+                            bad_coordinate,
+                            url_update
                         );
+                        if retries >= max_retries {
+                            // Send the error through the channel
+                            if let Err(err) = tx
+                                .send(Err(anyhow!("had bad coordinate, unable to get data")))
+                                .await
+                            {
+                                error!(logger, "Error sending error through channel: {}", err);
+                            }
+
+                            return Ok(());
+                        }
                         retries += 1;
                         continue;
                     }
@@ -594,7 +606,7 @@ pub async fn fetch_forecast_with_retry(
 }
 
 fn find_bad_points(xml: String) -> Point {
-    let re = Regex::new(r#"latitude "(.*?)" longitude "(.*?)"#).unwrap();
+    let re = Regex::new(r#"latitude "(-?\d+\.\d+)" longitude "(-?\d+\.\d+)"#).unwrap();
     let mut point = Point {
         latitude: String::from(""),
         longitude: String::from(""),
@@ -619,7 +631,7 @@ pub fn updated_url(bad_coordinate: Point, city_weather: &CityWeather) -> String 
         .city_data
         .iter()
         .filter(|&(_, v)| {
-            v.latitude == bad_coordinate.latitude && v.longitude == bad_coordinate.longitude
+            !(v.latitude == bad_coordinate.latitude && v.longitude == bad_coordinate.longitude)
         })
         .map(|(k, v)| {
             (
@@ -696,7 +708,7 @@ pub async fn get_forecasts(
     while let Some(result) = rx.recv().await {
         match result {
             Ok(data) => {
-                info!(logger, "Found more forecast data for: {:?}", data.keys());
+                info!(logger, "found more forecast data for: {:?}", data.keys());
                 forecast_data.extend(data);
             }
             Err(err) => {

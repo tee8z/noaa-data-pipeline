@@ -7,11 +7,11 @@ use std::{net::SocketAddr, str::FromStr};
 async fn main() -> anyhow::Result<()> {
     let cli = get_config_info();
     let logger = setup_logger(&cli);
-    let weather_data = cli.data_dir.unwrap_or(String::from("./weather_data"));
-    create_folder(&weather_data.clone());
+    let weather_data = cli.weather_dir.unwrap_or(String::from("./weather_data"));
+    create_folder(&logger, &weather_data.clone());
     let address = SocketAddr::from_str(&format!(
         "{}:{}",
-        cli.host.unwrap_or(String::from("127.0.0.1")),
+        cli.domain.unwrap_or(String::from("127.0.0.1")),
         cli.port.unwrap_or(String::from("9100"))
     ))
     .unwrap();

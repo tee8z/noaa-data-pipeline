@@ -36,7 +36,12 @@ pub async fn upload(
             )
         })?;
 
-        info!(state.logger, "length of `{}` is {} bytes", name, data.len());
+        info!(
+            state.logger,
+            "length of `{}` is {} mb",
+            name,
+            bytes_to_mb(data.len())
+        );
         let path = std::path::Path::new(&state.data_dir).join(&file_name);
         // Create a new file and write the data to it
         let mut file = File::create(&path).await.map_err(|err| {
@@ -55,6 +60,10 @@ pub async fn upload(
         })?;
     }
     Ok(())
+}
+
+fn bytes_to_mb(bytes: usize) -> f64 {
+    bytes as f64 / 1_048_576.0
 }
 
 // to prevent directory traversal attacks we ensure the path consists of exactly one normal component

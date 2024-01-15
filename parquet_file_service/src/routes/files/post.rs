@@ -1,32 +1,58 @@
+use std::sync::Arc;
+
 use axum::{
-    extract::{Multipart, Path},
+    extract::{Multipart, Path, State},
     http::StatusCode,
 };
-use tokio::{
-    fs::File,
-    io::AsyncWriteExt,
-};
+use slog::{error, info};
+use tokio::{fs::File, io::AsyncWriteExt};
+
+use crate::AppState;
 
 pub async fn upload(
+    State(state): State<Arc<AppState>>,
     Path(file_name): Path<String>,
     mut multipart: Multipart,
 ) -> Result<(), (StatusCode, String)> {
-    //TODO: make this configuerable, pull from context
-    let UPLOADS_DIRECTORY = "test";
     if !path_is_valid(&file_name) {
         return Err((StatusCode::BAD_REQUEST, "Invalid file".to_owned()));
     }
     while let Some(field) = multipart.next_field().await.unwrap() {
-        let name = field.name().unwrap().to_string();
-        let data = field.bytes().await.unwrap();
+        let name = field
+            .name()
+            .ok_or_else(|| {
+                error!(state.logger, "error getting file's name, missing");
+                (
+                    StatusCode::BAD_REQUEST,
+                    "Missing filename in multipart".to_string(),
+                )
+            })?
+            .to_string();
+        let data = field.bytes().await.map_err(|err| {
+            error!(state.logger, "error getting file's bytes: {}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get file's bytes: {}", err),
+            )
+        })?;
 
-        println!("Length of `{}` is {} bytes", name, data.len());
-        let path = std::path::Path::new(UPLOADS_DIRECTORY).join(&file_name);
+        info!(state.logger, "length of `{}` is {} bytes", name, data.len());
+        let path = std::path::Path::new(&state.data_dir).join(&file_name);
         // Create a new file and write the data to it
-        let mut file = File::create(&path).await.expect("Failed to create file");
-        file.write_all(&data)
-            .await
-            .expect("Failed to write to file");
+        let mut file = File::create(&path).await.map_err(|err| {
+            error!(state.logger, "error creating file: {}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create file: {}", err),
+            )
+        })?;
+        file.write_all(&data).await.map_err(|err| {
+            error!(state.logger, "error creating file: {}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to write to file: {}", err),
+            )
+        })?;
     }
     Ok(())
 }

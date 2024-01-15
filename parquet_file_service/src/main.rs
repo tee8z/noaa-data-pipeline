@@ -1,18 +1,29 @@
 use axum::Server;
-use parquet_file_service::{create_folder, app};
-use slog::Logger;
-use std::net::SocketAddr;
-
-//TODO: make config
-const UPLOADS_DIRECTORY: &str = "weather_data";
+use parquet_file_service::{app, create_folder, get_config_info, setup_logger};
+use slog::info;
+use std::{net::SocketAddr, str::FromStr};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    create_folder(&format!("./{}", UPLOADS_DIRECTORY));
-    let address = SocketAddr::from(([127, 0, 0, 1], 9100));
-    println!("listening on http://{}", address);
-    //TODO: make ui configuerable
-    let app = app(address.to_string(), String::from("./ui"));
+    let cli = get_config_info();
+    let logger = setup_logger(&cli);
+    let weather_data = cli.data_dir.unwrap_or(String::from("./weather_data"));
+    create_folder(&weather_data.clone());
+    let address = SocketAddr::from_str(&format!(
+        "{}:{}",
+        cli.host.unwrap_or(String::from("127.0.0.1")),
+        cli.port.unwrap_or(String::from("9100"))
+    ))
+    .unwrap();
+
+    info!(logger, "listening on http://{}", address);
+
+    let app = app(
+        logger,
+        cli.ui_dir.unwrap_or(String::from("./ui")),
+        address.to_string(),
+        weather_data,
+    );
     Server::bind(&address)
         .serve(app.into_make_service())
         .await?;

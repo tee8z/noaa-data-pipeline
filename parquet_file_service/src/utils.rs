@@ -1,7 +1,12 @@
-use std::{fs, path::Path, env};
+use std::{
+    env,
+    fs::{self, File},
+    io::Read,
+    path::Path,
+};
 
 use clap::{command, Parser};
-use slog::{Logger, Level, Drain, o};
+use slog::{o, Drain, Level, Logger};
 
 pub fn create_folder(root_path: &str) {
     let path = Path::new(root_path);
@@ -19,12 +24,46 @@ pub fn create_folder(root_path: &str) {
     }
 }
 
-#[derive(Parser, Clone)]
+#[derive(Parser, Clone, Debug, serde::Deserialize)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
-    /// Set the log level
+    /// Path to Settings.toml file holding the rest of the cli options
+    #[arg(short, long)]
+    pub config: Option<String>,
+
+    /// Set the log level (default: info)
     #[arg(short, long)]
     pub level: Option<String>,
+
+    /// Host to listen at (default: 120.0.0.1)
+    #[arg(short, long)]
+    pub host: Option<String>,
+
+    /// Port to listen on (default: 9100)
+    #[arg(short, long)]
+    pub port: Option<String>,
+
+    /// Path to stored parquet files that have been uploaded (default: ./weather_data)
+    #[arg(short, long)]
+    pub data_dir: Option<String>,
+
+    /// Path to files used to make the browser UI (default: ./ui)
+    #[arg(short, long)]
+    pub ui_dir: Option<String>,
+}
+
+pub fn get_config_info() -> Cli {
+    let mut cli = Cli::parse();
+
+    if let Some(config_path) = cli.config.clone() {
+        if let Ok(mut file) = File::open(config_path) {
+            let mut content = String::new();
+            file.read_to_string(&mut content)
+                .expect("Failed to read config file");
+            cli = toml::from_str(&content).expect("Failed to deserialize config")
+        };
+    };
+    cli
 }
 
 pub fn setup_logger(cli: &Cli) -> Logger {

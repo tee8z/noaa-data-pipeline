@@ -813,7 +813,6 @@ dependencies = [
  "arrow",
  "async-throttle",
  "clap",
- "config",
  "futures",
  "log",
  "openssl",
@@ -833,6 +832,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-util",
+ "toml",
  "zip",
 ]
 
@@ -1895,6 +1895,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-util",
+ "toml",
  "tower",
  "tower-http",
  "uuid",

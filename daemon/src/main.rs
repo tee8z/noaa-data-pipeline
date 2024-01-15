@@ -1,7 +1,6 @@
-use clap::Parser;
 use daemon::{
-    create_folder, get_coordinates, get_forecasts, get_observations, save_forecasts,
-    save_observations, send_parquet_files, setup_logger, Cli, RateLimiter,
+    create_folder, get_config_info, get_coordinates, get_forecasts, get_observations,
+    save_forecasts, save_observations, send_parquet_files, setup_logger, Cli, RateLimiter,
 };
 use slog::{debug, error, Logger};
 use std::{sync::Arc, time::Duration};
@@ -11,11 +10,14 @@ use tokio::time::interval;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let cli = Cli::parse();
+    let cli = get_config_info();
     let logger = setup_logger(&cli);
 
-    // Max send 2 requests per 20 second to noaa
-    let rate_limiter = Arc::new(Mutex::new(RateLimiter::new(3, 15.0)));
+    // Max send 3 requests per 15 second to noaa
+    let rate_limiter = Arc::new(Mutex::new(RateLimiter::new(
+        cli.rate_limit_capacity.unwrap_or(3),
+        cli.rate_limit_refill_rate.unwrap_or(15.0 as f64),
+    )));
 
     // Run once to start
     process_data(cli.clone(), logger.clone(), Arc::clone(&rate_limiter)).await?;

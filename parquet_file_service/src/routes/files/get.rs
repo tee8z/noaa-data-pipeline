@@ -1,30 +1,31 @@
+use std::sync::Arc;
+
 use axum::{
     body::StreamBody,
-    extract::Path,
+    extract::{Path, State},
     http::{HeaderValue, Request, StatusCode},
 };
 use hyper::{
     header::{CONTENT_DISPOSITION, CONTENT_TYPE},
-    Body, HeaderMap
+    Body, HeaderMap,
 };
-use tokio::{
-    fs::File,
-};
+use slog::error;
+use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
+use crate::AppState;
 
 pub async fn download(
+    State(state): State<Arc<AppState>>,
     Path(filename): Path<String>,
     _request: Request<Body>,
 ) -> Result<(HeaderMap, StreamBody<ReaderStream<File>>), (StatusCode, String)> {
-    //TODO: make this configuerable, pull from context
-    let UPLOADS_DIRECTORY = "test";
-    let file_path = format!("{}/{}", UPLOADS_DIRECTORY, filename);
+    let file_path = format!("{}/{}", state.data_dir, filename);
 
-    let file = File::open(file_path)
-        .await
-        .map_err(|err| (StatusCode::NOT_FOUND, format!("File not found: {}", err)))
-        .unwrap();
+    let file = File::open(file_path).await.map_err(|err| {
+        error!(state.logger, "error opening file: {}", err);
+        (StatusCode::NOT_FOUND, format!("File not found: {}", err))
+    })?;
 
     // convert the `AsyncRead` into a `Stream`
     let stream = ReaderStream::new(file);

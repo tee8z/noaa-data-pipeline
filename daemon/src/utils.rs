@@ -8,28 +8,58 @@ use slog::{debug, error, info, o, Drain, Level, Logger};
 use std::{
     env,
     fs::{self, File},
-    io::Write,
+    io::{Write, Read},
     path::Path,
     sync::Arc,
     thread,
     time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
-#[derive(Parser, Clone)]
+#[derive(Parser, Clone, Debug, serde::Deserialize)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
-    /// Set the log level
+    /// Path to Settings.toml file holding the rest of the cli options
+    #[arg(short, long)]
+    pub config: Option<String>,
+
+    /// Set the log level (default: info)
     #[arg(short, long)]
     pub level: Option<String>,
 
+    /// Base url to the parquet file service (default: http://localhost:9100)
     #[arg(short, long)]
     pub base_url: Option<String>,
 
+    /// Path to directly storing parquet files before upload (default: ./data)
     #[arg(short,long)]
     pub data_dir: Option<String>,
 
+    /// Length of time to wait before pulling data again in seconds (default: 3600)
     #[arg(short,long)]
     pub sleep_interval: Option<u64>,
+
+    /// How quickly the rate limiter will release tokens (default: 15 seconds)
+    #[arg(short,long)]
+    pub rate_limit_refill_rate: Option<f64>,
+
+    /// How man tokens can be used within the refill rate (default: 3)
+    #[arg(short,long)]
+    pub rate_limit_capacity: Option<usize>,
+
+}
+
+pub fn get_config_info() -> Cli {
+    let mut cli = Cli::parse();
+    
+    if let Some(config_path) = cli.config.clone() {
+        if let Ok(mut file) = File::open(config_path) {
+            let mut content = String::new();
+            file.read_to_string(&mut content)
+                .expect("Failed to read config file");
+            cli = toml::from_str(&content).expect("Failed to deserialize config")
+        };
+    };
+    cli
 }
 
 pub fn setup_logger(cli: &Cli) -> Logger {

@@ -24,6 +24,12 @@ pub struct Cli {
 
     #[arg(short, long)]
     pub base_url: Option<String>,
+
+    #[arg(short,long)]
+    pub data_dir: Option<String>,
+
+    #[arg(short,long)]
+    pub sleep_interval: Option<u64>,
 }
 
 pub fn setup_logger(cli: &Cli) -> Logger {

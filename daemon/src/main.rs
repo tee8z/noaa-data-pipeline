@@ -30,7 +30,9 @@ async fn process_weather_data_hourly(
     logger: Logger,
     rate_limit: Arc<Mutex<RateLimiter>>,
 ) {
-    let sleep_between_checks = 3600;
+    // defaults to once an hour
+    let sleep_between_checks = cli.sleep_interval.unwrap_or(3600);
+
     let mut check_channel_interval = interval(Duration::from_secs(sleep_between_checks));
     loop {
         tokio::select! {
@@ -76,16 +78,17 @@ async fn process_data(
         get_observations(&logger, &city_weather_coordinates, rate_limiter_observation).await?;
     debug!(logger, "observations: {:?}", observations);
     let current_utc_time: String = OffsetDateTime::now_utc().format(&Rfc3339)?;
-    let root_path = "./data";
-    create_folder(root_path, &logger);
+    let root_path = cli.data_dir.clone().unwrap_or(String::from("./data"));
+
+    create_folder(&root_path, &logger);
     let forecast_parquet = save_forecasts(
         forecasts,
-        root_path,
+        &root_path,
         format!("{}_{}", "forecasts", current_utc_time),
     );
     let observation_parquet = save_observations(
         observations,
-        root_path,
+        &root_path,
         format!("{}_{}", "observations", current_utc_time),
     );
     send_parquet_files(&cli, observation_parquet, forecast_parquet).await?;

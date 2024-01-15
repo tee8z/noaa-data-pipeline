@@ -29,3 +29,5 @@ serde-xml-rs = "0.6.0"
 zip = "0.6.6"
 tempfile = "3.9.0"
 regex = "1.10.2"
+openssl = { version = "0.10", features = ["vendored"] }
+config = "0.13.1"

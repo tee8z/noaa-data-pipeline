@@ -60,12 +60,7 @@ pub async fn send_parquet_files(
     observation_relative_file_path: String,
     forecast_relative_file_path_file: String,
 ) -> Result<(), Error> {
-    let base_url = if let Some(base_url) = &cli.base_url {
-        base_url
-    } else {
-        "http://localhost:9100"
-    };
-
+    let base_url = cli.base_url.clone().unwrap_or(String::from("http://localhost:9100"));
     let observation_filename = observation_relative_file_path.split('/').last().unwrap();
     let forecast_filename = forecast_relative_file_path_file.split('/').last().unwrap();
 

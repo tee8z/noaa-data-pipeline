@@ -14,5 +14,5 @@ pub async fn index(remote_url: &str, ui_dir: &str) -> String {
         .await
         .expect("Unable to read index.html");
 
-    file_content.replace("{SERVER_ADDRESS}", &format!("https://{}", remote_url))
+    file_content.replace("{SERVER_ADDRESS}", remote_url)
 }

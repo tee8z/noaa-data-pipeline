@@ -63,23 +63,23 @@ pub struct MoreWeatherInformation {
 pub struct Parameter {
     #[serde(rename = "temperature")]
     //holds max and min
-    pub temperature: Vec<DataReading>,
+    pub temperature: Option<Vec<DataReading>>,
 
     #[serde(rename = "precipitation")]
-    pub precipitation: DataReading,
+    pub precipitation: Option<DataReading>,
 
     #[serde(rename = "wind-speed")]
-    pub wind_speed: DataReading,
+    pub wind_speed: Option<DataReading>,
 
     #[serde(rename = "direction")]
-    pub wind_direction: DataReading,
+    pub wind_direction: Option<DataReading>,
 
     #[serde(rename = "probability-of-precipitation")]
-    pub probability_of_precipitation: DataReading,
+    pub probability_of_precipitation: Option<DataReading>,
 
     #[serde(rename = "humidity")]
     // holds max and min
-    pub humidity: Vec<DataReading>,
+    pub humidity: Option<Vec<DataReading>>,
 
     #[serde(rename = "applicable-location")]
     pub applicable_location: String,

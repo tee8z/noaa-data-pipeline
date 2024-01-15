@@ -311,11 +311,10 @@ pub struct TimeWindow {
     pub time_interval: Duration,
 }
 
+//***THIS IS WHERE THE FLATTENING OF THE DATA OCCURS, IF THERE ARE ISSUES IN THE END DATA START HERE TO SOLVE***
 impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
     type Error = anyhow::Error;
     fn try_from(raw_data: Dwml) -> Result<Self, Self::Error> {
-        println!("trying to convert into flatted weather forecast format");
-
         let mut time_layouts: HashMap<String, Vec<TimeRange>> = HashMap::new();
         for time_layout in raw_data.data.time_layout {
             let time_range: Vec<TimeRange> = time_layout.to_time_ranges()?;
@@ -329,58 +328,54 @@ impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
         raw_data.data.location.iter().for_each(|location| {
             let weather_forecast =
                 get_forecasts_ranges(location, generated_at, time_layouts.clone());
-            println!("inserting into weather_data: {:?}", weather_forecast);
             weather.insert(location.location_key.clone(), weather_forecast);
         });
 
         for parameter_point in raw_data.data.parameters {
             let location_key = parameter_point.applicable_location.clone();
             let weather_data = weather.get_mut(&location_key).unwrap();
-            println!("found weather_data: {:?}", weather_data);
-            for temp in parameter_point.temperature.clone() {
-                // We want this to panic, we should never have a time layout that doesn't exist in the map
-                let temp_times = time_layouts.get(&temp.time_layout).unwrap();
-                add_data(weather_data, temp_times, &temp)?;
+
+            if let Some(temps) = parameter_point.temperature {
+                for temp in temps {
+                    // We want this to panic, we should never have a time layout that doesn't exist in the map
+                    let temp_times = time_layouts.get(&temp.time_layout).unwrap();
+                    add_data(weather_data, temp_times, &temp)?;
+                }
             }
 
-            for humidity in parameter_point.humidity.clone() {
-                let humidity_times = time_layouts.get(&humidity.time_layout).unwrap();
-                add_data(weather_data, humidity_times, &humidity)?;
+            if let Some(humidities) = parameter_point.humidity {
+                for humidity in humidities {
+                    let humidity_times = time_layouts.get(&humidity.time_layout).unwrap();
+                    add_data(weather_data, humidity_times, &humidity)?;
+                }
             }
 
-            let precipitation_times = time_layouts
-                .get(&parameter_point.precipitation.time_layout)
-                .unwrap();
-            add_data(
-                weather_data,
-                precipitation_times,
-                &parameter_point.precipitation,
-            )?;
+            if let Some(precipitation) = parameter_point.precipitation {
+                let precipitation_times = time_layouts.get(&precipitation.time_layout).unwrap();
+                add_data(weather_data, precipitation_times, &precipitation)?;
+            }
 
-            let probability_of_precipitation_times = time_layouts
-                .get(&parameter_point.probability_of_precipitation.time_layout)
-                .unwrap();
-            add_data(
-                weather_data,
-                probability_of_precipitation_times,
-                &parameter_point.probability_of_precipitation,
-            )?;
+            if let Some(probability_of_precipitation) = parameter_point.probability_of_precipitation
+            {
+                let probability_of_precipitation_times = time_layouts
+                    .get(&probability_of_precipitation.time_layout)
+                    .unwrap();
+                add_data(
+                    weather_data,
+                    probability_of_precipitation_times,
+                    &probability_of_precipitation,
+                )?;
+            }
 
-            let wind_direction_times = time_layouts
-                .get(&parameter_point.wind_direction.time_layout)
-                .unwrap();
-            add_data(
-                weather_data,
-                wind_direction_times,
-                &parameter_point.wind_direction,
-            )?;
+            if let Some(wind_direction) = parameter_point.wind_direction {
+                let wind_direction_times = time_layouts.get(&wind_direction.time_layout).unwrap();
+                add_data(weather_data, wind_direction_times, &wind_direction)?;
+            }
 
-            let wind_speed_times = time_layouts
-                .get(&parameter_point.wind_speed.time_layout)
-                .unwrap();
-            add_data(weather_data, wind_speed_times, &parameter_point.wind_speed)?;
-
-            println!("updated weather_data: {:?}", weather_data);
+            if let Some(wind_speed) = parameter_point.wind_speed {
+                let wind_speed_times = time_layouts.get(&wind_speed.time_layout).unwrap();
+                add_data(weather_data, wind_speed_times, &wind_speed)?;
+            }
         }
         Ok(weather)
     }

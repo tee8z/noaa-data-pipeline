@@ -98,7 +98,7 @@ impl RateLimiter {
                 }
 
                 retries += 1;
-                thread::sleep(Duration::from_secs(10));
+                thread::sleep(Duration::from_secs(20));
             }
         }
     }

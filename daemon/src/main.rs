@@ -15,13 +15,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let logger = setup_logger(&cli);
 
     // Max send 2 requests per 20 second to noaa
-    let rate_limiter = Arc::new(Mutex::new(RateLimiter::new(2, 20.0)));
+    let rate_limiter = Arc::new(Mutex::new(RateLimiter::new(3, 20.0)));
 
     // Run once to start
     process_data(cli.clone(), logger.clone(), Arc::clone(&rate_limiter)).await?;
 
     // Run every hour after
-    //process_weather_data_hourly(cli, logger, Arc::clone(&rate_limiter)).await;
+    process_weather_data_hourly(cli, logger, Arc::clone(&rate_limiter)).await;
     Ok(())
 }
 
@@ -88,6 +88,6 @@ async fn process_data(
         root_path,
         format!("{}_{}", "observations", current_utc_time),
     );
-    //send_parquet_files(&cli, observation_parquet, forecast_parquet).await?;
+    send_parquet_files(&cli, observation_parquet, forecast_parquet).await?;
     Ok(())
 }

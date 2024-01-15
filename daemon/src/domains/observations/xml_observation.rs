@@ -16,44 +16,44 @@ pub struct CurrentObservation {
     pub longitude: String,
 
     #[serde(rename = "observation_time")]
-    pub observation_time: String,
+    pub observation_time: Option<String>,
 
     #[serde(rename = "observation_time_rfc822")]
-    pub observation_time_rfc822: String,
+    pub observation_time_rfc822: Option<String>,
 
     #[serde(rename = "temperature_string")]
-    pub temperature_string: String,
+    pub temperature_string: Option<String>,
 
     #[serde(rename = "temp_f")]
-    pub temp_f: String,
+    pub temp_f:Option<String>,
 
     #[serde(rename = "temp_c")]
-    pub temp_c: String,
+    pub temp_c: Option<String>,
 
     #[serde(rename = "relative_humidity")]
-    pub relative_humidity: String,
+    pub relative_humidity: Option<String>,
 
     #[serde(rename = "wind_string")]
-    pub wind_string: String,
+    pub wind_string: Option<String>,
 
     #[serde(rename = "wind_dir")]
-    pub wind_dir: String,
+    pub wind_dir: Option<String>,
 
     #[serde(rename = "wind_degrees")]
-    pub wind_degrees: String,
+    pub wind_degrees: Option<String>,
 
     #[serde(rename = "wind_mph")]
-    pub wind_mph: String,
+    pub wind_mph: Option<String>,
 
     #[serde(rename = "wind_kt")]
-    pub wind_kt: String,
+    pub wind_kt: Option<String>,
 
     #[serde(rename = "dewpoint_string")]
-    pub dewpoint_string: String,
+    pub dewpoint_string: Option<String>,
 
     #[serde(rename = "dewpoint_f")]
-    pub dewpoint_f: String,
+    pub dewpoint_f:Option<String>,
 
     #[serde(rename = "dewpoint_c")]
-    pub dewpoint_c: String,
+    pub dewpoint_c:Option<String>,
 }

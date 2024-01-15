@@ -6,6 +6,7 @@ use parquet::{
     record::RecordWriter,
 };
 use reqwest::{multipart, Body, Client};
+use slog::{error, info, Logger};
 use tokio::fs::File as TokioFile;
 use tokio_util::codec::{BytesCodec, FramedRead};
 
@@ -57,15 +58,14 @@ pub fn save_forecasts(forecast: Vec<Forecast>, root_path: &str, file_name: Strin
 
 pub async fn send_parquet_files(
     cli: &Cli,
+    logger: Logger,
     observation_relative_file_path: String,
     forecast_relative_file_path_file: String,
 ) -> Result<(), Error> {
-    let base_url = if let Some(base_url) = &cli.base_url {
-        base_url
-    } else {
-        "http://localhost:9100"
-    };
-
+    let base_url = cli
+        .base_url
+        .clone()
+        .unwrap_or(String::from("http://localhost:9100"));
     let observation_filename = observation_relative_file_path.split('/').last().unwrap();
     let forecast_filename = forecast_relative_file_path_file.split('/').last().unwrap();
 
@@ -75,12 +75,37 @@ pub async fn send_parquet_files(
     let url_observ = format!("{}/file/{}", base_url, observation_filename);
     let url_forcast = format!("{}/file/{}", base_url, forecast_filename);
 
-    send_file_to_endpoint(&observation_full_path, observation_filename, &url_observ).await?;
-    send_file_to_endpoint(&forecast_full_path, forecast_filename, &url_forcast).await?;
+    match send_file_to_endpoint(
+        &logger,
+        &observation_full_path,
+        observation_filename,
+        &url_observ,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(e) => {
+            error!(logger, "failed to upload observations: {}", e)
+        }
+    }
+    match send_file_to_endpoint(
+        &logger,
+        &forecast_full_path,
+        forecast_filename,
+        &url_forcast,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(e) => {
+            error!(logger, "failed to upload forecasts: {}", e)
+        }
+    }
     Ok(())
 }
 
 async fn send_file_to_endpoint(
+    logger: &Logger,
     file_path: &str,
     file_name: &str,
     endpoint_url: &str,
@@ -105,7 +130,7 @@ async fn send_file_to_endpoint(
     let form = multipart::Form::new().part("file", parquet_file);
 
     // Create a request builder for a POST request to the endpoint.
-    println!("endpoint: {}", endpoint_url);
+    info!(logger, "sending file to endpoint: {}", endpoint_url);
     let response = client
         .post(endpoint_url)
         .multipart(form)
@@ -115,10 +140,11 @@ async fn send_file_to_endpoint(
 
     // Check the response status.
     if response.status().is_success() {
-        println!("File successfully uploaded.");
+        info!(logger, "file successfully uploaded.");
     } else {
-        println!(
-            "Failed to upload the file. Status code: {:?}",
+        error!(
+            logger,
+            "failed to upload the file. status code: {:?}",
             response.status()
         );
     }

@@ -61,6 +61,7 @@ async fn process_weather_data_hourly(
             }
             _ = ctrl_c() => {
                 info!(logger, "shutting down");
+                break;
             },
         }
     }

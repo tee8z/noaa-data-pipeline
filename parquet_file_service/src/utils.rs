@@ -6,7 +6,7 @@ use std::{
 };
 
 use clap::{command, Parser};
-use slog::{o, Drain, Level, Logger, error, info};
+use slog::{error, info, o, Drain, Level, Logger};
 
 pub fn create_folder(logger: &Logger, root_path: &str) {
     let path = Path::new(root_path);
@@ -41,6 +41,10 @@ pub struct Cli {
     /// Port to listen on (default: 9100)
     #[arg(short, long)]
     pub port: Option<String>,
+
+    /// Port to listen on (default: http://127.0.0.1:9100)
+    #[arg(short, long)]
+    pub remote_url: Option<String>,
 
     /// Path to stored parquet files that have been uploaded (default: ./weather_data)
     #[arg(short, long)]

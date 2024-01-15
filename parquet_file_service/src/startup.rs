@@ -18,10 +18,10 @@ pub struct AppState {
     pub logger: Logger,
     pub data_dir: String,
     pub ui_dir: String,
-    pub server_address: String,
+    pub remote_url: String,
 }
 
-pub fn app(logger: Logger, server_address: String, ui_dir: String, data_dir: String) -> Router {
+pub fn app(logger: Logger, remote_url: String, ui_dir: String, data_dir: String) -> Router {
     let cors = CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])
@@ -34,7 +34,7 @@ pub fn app(logger: Logger, server_address: String, ui_dir: String, data_dir: Str
         logger,
         data_dir,
         ui_dir,
-        server_address,
+        remote_url,
     };
     Router::new()
         .route("/files", get(files)) //TODO: add filtering based on observation vs forecast and time ranges

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use slog::Logger;
 use tokio::sync::Mutex;
 
-use crate::{fetch_xml, RateLimiter};
+use crate::{fetch_xml, Point, RateLimiter};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct WeatherStation {
@@ -67,16 +67,22 @@ impl fmt::Display for CityWeather {
     }
 }
 impl CityWeather {
-    pub fn get_coordinates(&self) -> String {
+    pub fn get_coordinates_url(&self) -> String {
+        self.get_coordinates().join("%20")
+    }
+
+    pub fn get_coordinates(&self) -> Vec<String> {
         self.city_data
             .values()
             .map(|weather_station| {
                 format!("{},{}", weather_station.latitude, weather_station.longitude)
             })
             .collect::<Vec<String>>()
-            .join("%20")
     }
-
+    pub fn remove_coordinates(mut self, point: Point) {
+        self.city_data
+            .retain(|_, v| !(v.latitude == point.latitude && v.longitude == point.longitude)); 
+    }
     pub fn get_station_ids(&self) -> HashSet<String> {
         let mut station_ids: HashSet<String> = HashSet::new();
         self.city_data.iter().for_each(|(_city_name, city_data)| {
@@ -96,7 +102,7 @@ pub fn split_cityweather(original: CityWeather, max_keys_per_map: usize) -> Vec<
         if current_keys + 1 > max_keys_per_map {
             // If yes, start a new map
             result.push(CityWeather {
-                city_data: std::mem::replace(&mut current_map, HashMap::new()),
+                city_data: std::mem::take(&mut current_map),
             });
             current_keys = 0;
         }

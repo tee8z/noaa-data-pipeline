@@ -8,22 +8,16 @@ use time::{macros::format_description, OffsetDateTime};
 #[serde(rename = "dwml")]
 pub struct Dwml {
     #[serde(rename = "head")]
-    pub head: Head,
+    pub head: Option<Head>,
 
     #[serde(rename = "data")]
     pub data: Data,
-
-    #[serde(rename = "version")]
-    pub version: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct Data {
     #[serde(rename = "location")]
     pub location: Vec<Location>,
-
-    #[serde(rename = "moreWeatherInformation")]
-    pub more_weather_information: Vec<MoreWeatherInformation>,
 
     #[serde(rename = "time-layout")]
     pub time_layout: Vec<TimeLayout>,
@@ -53,10 +47,10 @@ pub struct Point {
     pub longitude: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
-pub struct MoreWeatherInformation {
-    #[serde(rename = "applicable-location")]
-    pub applicable_location: String,
+impl Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{},{}", self.latitude, self.longitude)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
@@ -149,7 +143,6 @@ impl TimeLayout {
                     time_ranges
                 });
         result.retain(|time_range| time_range.start_time != OffsetDateTime::UNIX_EPOCH);
-        println!("time_ranges: {:?}", result);
         Ok(result.clone())
     }
 }
@@ -167,61 +160,13 @@ pub enum Time {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct Head {
     #[serde(rename = "product")]
-    pub product: Product,
-
-    #[serde(rename = "source")]
-    pub source: Source,
+    pub product: Option<Product>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct Product {
-    #[serde(rename = "title")]
-    pub title: String,
-
-    #[serde(rename = "field")]
-    pub field: String,
-
-    #[serde(rename = "category")]
-    pub category: String,
-
     #[serde(rename = "creation-date")]
-    pub creation_date: String,
-
-    #[serde(rename = "srsName")]
-    pub srs_name: String,
-
-    #[serde(rename = "concise-name")]
-    pub concise_name: String,
-
-    #[serde(rename = "operational-mode")]
-    pub operational_mode: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
-pub struct Source {
-    #[serde(rename = "more-information")]
-    pub more_information: String,
-
-    #[serde(rename = "production-center")]
-    pub production_center: ProductionCenter,
-
-    #[serde(rename = "disclaimer")]
-    pub disclaimer: String,
-
-    #[serde(rename = "credit")]
-    pub credit: String,
-
-    #[serde(rename = "credit-logo")]
-    pub credit_logo: String,
-
-    #[serde(rename = "feedback")]
-    pub feedback: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
-pub struct ProductionCenter {
-    #[serde(rename = "sub-center")]
-    pub sub_center: String,
+    pub creation_date: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
@@ -309,16 +254,4 @@ impl Display for Units {
             Units::Percent => write!(f, "percent"),
         }
     }
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub enum Summarization {
-    #[serde(rename = "none")]
-    None,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub enum TimeCoordinate {
-    #[serde(rename = "local")]
-    Local,
 }

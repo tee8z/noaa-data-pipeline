@@ -15,7 +15,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let logger = setup_logger(&cli);
 
     // Max send 2 requests per 20 second to noaa
-    let rate_limiter = Arc::new(Mutex::new(RateLimiter::new(3, 20.0)));
+    let rate_limiter = Arc::new(Mutex::new(RateLimiter::new(3, 15.0)));
 
     // Run once to start
     process_data(cli.clone(), logger.clone(), Arc::clone(&rate_limiter)).await?;

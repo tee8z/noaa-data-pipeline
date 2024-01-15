@@ -4,7 +4,7 @@ use parquet::{
     schema::types::Type,
 };
 use parquet_derive::ParquetRecordWriter;
-use slog::{debug, Logger};
+use slog::{debug, error, Logger};
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
@@ -268,10 +268,17 @@ fn parse_weather_data(
         let mut entry = archive.by_index(file_index)?;
         let mut content = String::new();
         entry.read_to_string(&mut content)?;
-        println!("raw string: {}", content);
-        let converted_xml: CurrentObservation = serde_xml_rs::from_str(&content)?;
+        let converted_xml: CurrentObservation = match serde_xml_rs::from_str(&content) {
+            Ok(val) => val,
+            Err(e) => {
+                error!(logger, "error converting the raw content: {}", e);
+                CurrentObservation::default()
+            }
+        };
         debug!(logger.clone(), "converted xml: {:?}", converted_xml);
-        current_weather.insert(converted_xml.station_id.clone(), converted_xml.try_into()?);
+        if converted_xml != CurrentObservation::default() {
+            current_weather.insert(converted_xml.station_id.clone(), converted_xml.try_into()?);
+        }
     }
     Ok(current_weather)
 }

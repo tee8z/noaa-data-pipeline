@@ -78,7 +78,7 @@ impl RateLimiter {
         let elapsed_time = now.duration_since(self.last_refill).as_secs_f64();
         let tokens_to_add = elapsed_time * self.refill_rate;
 
-        self.tokens = self.tokens + tokens_to_add.min(self.capacity as f64);
+        self.tokens += tokens_to_add.min(self.capacity as f64);
         self.last_refill = now;
     }
 

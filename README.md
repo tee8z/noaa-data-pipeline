@@ -1,4 +1,6 @@
 ## A simple system showing how to create a data pipeline from NOAA
+Live site located at: [4casttruth.win](https://www.4casttruth.win/)
+Feel free to pull the parquet files and use in your own data analysis (python is a good choice to do this with)
 
 ### Example of using the UI:
 

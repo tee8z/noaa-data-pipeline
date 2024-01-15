@@ -1,13 +1,15 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt,
+    sync::Arc,
 };
 
 use anyhow::Error;
 use serde::{Deserialize, Serialize};
 use slog::Logger;
+use tokio::sync::Mutex;
 
-use crate::fetch_xml;
+use crate::{fetch_xml, RateLimiter};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct WeatherStation {
@@ -114,9 +116,17 @@ pub fn split_cityweather(original: CityWeather, max_keys_per_map: usize) -> Vec<
     result
 }
 
-pub async fn get_coordinates(logger: &Logger) -> Result<CityWeather, Error> {
+pub async fn get_coordinates(
+    logger: &Logger,
+    rate_limit: Arc<Mutex<RateLimiter>>,
+) -> Result<CityWeather, Error> {
     let mut city_data: HashMap<String, WeatherStation> = HashMap::new();
-    let raw_xml = fetch_xml(logger, "https://w1.weather.gov/xml/current_obs/index.xml").await?;
+    let raw_xml = fetch_xml(
+        logger,
+        "https://w1.weather.gov/xml/current_obs/index.xml",
+        rate_limit,
+    )
+    .await?;
     let converted_xml: WxStationIndex = serde_xml_rs::from_str(&raw_xml)?;
 
     for station in converted_xml.station {

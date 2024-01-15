@@ -12,9 +12,10 @@ use std::{
     sync::Arc,
 };
 use time::{format_description::well_known::Rfc2822, macros::format_description, OffsetDateTime};
+use tokio::sync::Mutex;
 use zip::ZipArchive;
 
-use crate::{fetch_xml_zip, CityWeather, CurrentObservation, Units};
+use crate::{fetch_xml_zip, CityWeather, CurrentObservation, RateLimiter, Units};
 
 #[derive(Clone)]
 pub struct CurrentWeather {
@@ -221,9 +222,10 @@ pub fn create_observation_schema() -> Type {
 pub async fn get_observations(
     logger: &Logger,
     city_weather: &CityWeather,
+    rate_limit: Arc<Mutex<RateLimiter>>,
 ) -> Result<Vec<Observation>, Error> {
     let url = "https://w1.weather.gov/xml/current_obs/all_xml.zip";
-    let zip_file = fetch_xml_zip(logger, url).await?;
+    let zip_file = fetch_xml_zip(logger, url, rate_limit).await?;
     let find_file_indexies =
         find_file_indexes_for_stations(zip_file.try_clone()?, city_weather.get_station_ids())?;
     let current_weather = parse_weather_data(logger, zip_file, find_file_indexies)?;

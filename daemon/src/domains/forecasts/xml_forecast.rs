@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 use time::{macros::format_description, OffsetDateTime};
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 #[serde(rename = "dwml")]
 pub struct Dwml {
     #[serde(rename = "head")]
@@ -17,7 +17,7 @@ pub struct Dwml {
     pub version: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct Data {
     #[serde(rename = "location")]
     pub location: Vec<Location>,
@@ -32,7 +32,7 @@ pub struct Data {
     pub parameters: Vec<Parameter>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct Location {
     #[serde(rename = "location-key")]
     pub location_key: String,
@@ -44,7 +44,7 @@ pub struct Location {
     pub station_id: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct Point {
     #[serde(rename = "latitude")]
     pub latitude: String,
@@ -53,13 +53,13 @@ pub struct Point {
     pub longitude: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct MoreWeatherInformation {
     #[serde(rename = "applicable-location")]
     pub applicable_location: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct Parameter {
     #[serde(rename = "temperature")]
     //holds max and min
@@ -85,7 +85,7 @@ pub struct Parameter {
     pub applicable_location: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct DataReading {
     #[serde(rename = "name")]
     pub name: Name,
@@ -103,7 +103,7 @@ pub struct DataReading {
     pub time_layout: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone, Default)]
 #[serde(rename_all = "PascalCase")]
 pub struct TimeLayout {
     #[serde(rename = "time-coordinate")]
@@ -164,7 +164,7 @@ pub enum Time {
     EndTime(String),
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct Head {
     #[serde(rename = "product")]
     pub product: Product,
@@ -173,7 +173,7 @@ pub struct Head {
     pub source: Source,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct Product {
     #[serde(rename = "title")]
     pub title: String,
@@ -197,14 +197,7 @@ pub struct Product {
     pub operational_mode: String,
 }
 
-/*
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct CreationDate {
-    #[serde(rename = "refresh-frequency")]
-    pub refresh_frequency: String,
-}*/
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct Source {
     #[serde(rename = "more-information")]
     pub more_information: String,
@@ -225,18 +218,19 @@ pub struct Source {
     pub feedback: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct ProductionCenter {
     #[serde(rename = "sub-center")]
     pub sub_center: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub enum Type {
     #[serde(rename = "liquid")]
     Liquid,
 
     #[serde(rename = "maximum")]
+    #[default]
     Maximum,
 
     #[serde(rename = "maximum relative")]
@@ -258,9 +252,10 @@ pub enum Type {
     Wind,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub enum Name {
     #[serde(rename = "Daily Maximum Relative Humidity")]
+    #[default]
     DailyMaximumRelativeHumidity,
 
     #[serde(rename = "Daily Maximum Temperature")]
@@ -285,12 +280,13 @@ pub enum Name {
     WindSpeed,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub enum Units {
     #[serde(rename = "degrees true")]
     DegreesTrue,
 
     #[serde(rename = "Fahrenheit")]
+    #[default]
     Fahrenheit,
 
     #[serde(rename = "inches")]

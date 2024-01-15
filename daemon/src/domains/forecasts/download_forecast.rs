@@ -3,7 +3,8 @@ use crate::Type::{
     ProbabilityOfPrecipitationWithin12Hours, Sustained, Wind,
 };
 use crate::{
-    fetch_xml, CityWeather, DataReading, Dwml, Location, Units, WeatherStation, split_cityweather,
+    fetch_xml, split_cityweather, CityWeather, DataReading, Dwml, Location, RateLimiter, Units,
+    WeatherStation,
 };
 use anyhow::{anyhow, Error};
 use core::time::Duration as StdDuration;
@@ -14,11 +15,12 @@ use parquet::{
 };
 use parquet_derive::ParquetRecordWriter;
 use serde_xml_rs::from_str;
-use slog::{debug, error, Logger};
+use slog::{debug, error, info, Logger};
 use std::sync::Arc;
 use std::{collections::HashMap, ops::Add};
 use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime};
 use tokio::sync::mpsc;
+use tokio::sync::Mutex;
 use tokio::time::sleep;
 /*
 More Options defined  here:
@@ -394,6 +396,7 @@ fn add_data(
         let mut time_iter = time_ranges.iter();
         let mut current_time = time_iter.next().unwrap();
         let mut time_interval_index: Option<usize> = None;
+
         // This is an important time comparison, if there are more None's than expected this may be the source
         while current_time.start_time <= current_data.begin_time {
             time_interval_index = if let Some(mut interval) = time_interval_index {
@@ -412,56 +415,82 @@ fn add_data(
         match data.reading_type {
             Liquid => {
                 if let Some(index) = time_interval_index {
-                    current_data.liquid_precipitation_amt =
-                        Some((data.value.get(index)).unwrap().parse::<f64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<f64>() {
+                            current_data.liquid_precipitation_amt = Some(parsed);
+                        }
+                    }
                 }
                 current_data.liquid_precipitation_unit_code = data.units.to_string();
             }
             Maximum => {
                 if let Some(index) = time_interval_index {
-                    current_data.max_temp = Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.max_temp = Some(parsed);
+                        }
+                    }
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
             MaximumRelative => {
                 if let Some(index) = time_interval_index {
-                    current_data.relative_humidity_max =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.relative_humidity_max = Some(parsed);
+                        }
+                    }
                 }
                 current_data.relative_humidity_unit_code = data.units.to_string();
             }
             Minimum => {
                 if let Some(index) = time_interval_index {
-                    current_data.min_temp = Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.min_temp = Some(parsed);
+                        }
+                    }
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
             MinimumRelative => {
                 if let Some(index) = time_interval_index {
-                    current_data.relative_humidity_min =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.relative_humidity_min = Some(parsed);
+                        }
+                    }
                 }
                 current_data.relative_humidity_unit_code = data.units.to_string();
             }
             Sustained => {
                 if let Some(index) = time_interval_index {
-                    current_data.wind_speed =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.wind_speed = Some(parsed);
+                        }
+                    }
                 }
                 current_data.wind_speed_unit_code = data.units.to_string();
             }
             ProbabilityOfPrecipitationWithin12Hours => {
                 if let Some(index) = time_interval_index {
-                    current_data.twelve_hour_probability_of_precipitation =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.twelve_hour_probability_of_precipitation = Some(parsed);
+                        }
+                    }
                 }
                 current_data.twelve_hour_probability_of_precipitation_unit_code =
                     data.units.to_string();
             }
             Wind => {
                 if let Some(index) = time_interval_index {
-                    current_data.wind_direction =
-                        Some((data.value.get(index)).unwrap().parse::<i64>()?);
+                    if let Some(value) = data.value.get(index) {
+                        if let Ok(parsed) = value.parse::<i64>() {
+                            current_data.wind_direction = Some(parsed);
+                        }
+                    }
                 }
                 current_data.wind_direction_unit_code = data.units.to_string();
             }
@@ -476,16 +505,36 @@ pub async fn fetch_forecast_with_retry(
     url: &str,
     max_retries: usize,
     city_weather: &CityWeather,
+    rate_limit: Arc<Mutex<RateLimiter>>,
 ) {
     let mut retries = 0;
     loop {
-        match fetch_xml(logger, url).await {
+        match fetch_xml(logger, url, rate_limit.clone()).await {
             Ok(xml) => {
-                let converted_xml: Dwml = from_str(&xml).unwrap(); // You might want to handle errors here
+                let converted_xml: Dwml = match from_str(&xml) {
+                    Ok(xml) => xml,
+                    Err(err) => {
+                        error!(logger, "error converting xml: {}", err);
+                        Dwml::default()
+                    }
+                };
+                if converted_xml == Dwml::default() {
+                    info!(logger, "no current forecast xml found, skipping");
+                    break;
+                }
                 let weather_with_stations = add_station_ids(city_weather, converted_xml);
                 let current_forecast_data: HashMap<String, Vec<WeatherForecast>> =
-                    weather_with_stations.try_into().unwrap(); // You might want to handle errors here
-
+                    match weather_with_stations.try_into() {
+                        Ok(weather) => weather,
+                        Err(err) => {
+                            error!(logger, "error converting: {}", err);
+                            HashMap::new()
+                        }
+                    };
+                if current_forecast_data.len() == 0 {
+                    info!(logger, "no current forecast data found, skipping");
+                    break;
+                }
                 // Send the result through the channel
                 if let Err(err) = tx.send(Ok(current_forecast_data)).await {
                     error!(logger, "Error sending result through channel: {}", err);
@@ -514,6 +563,7 @@ pub async fn fetch_forecast_with_retry(
 pub async fn get_forecasts(
     logger: &Logger,
     city_weather: &CityWeather,
+    rate_limiter: Arc<Mutex<RateLimiter>>,
 ) -> Result<Vec<Forecast>, Error> {
     let split_maps = split_cityweather(city_weather.clone(), 50);
 
@@ -526,11 +576,17 @@ pub async fn get_forecasts(
         let tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>> = tx.clone();
         let url = get_url(&city_weather);
         let max_retries = max_retries;
-
+        let rate_limiter_cpy = Arc::clone(&rate_limiter);
         tokio::spawn(async move {
-            // Adding a sleep here to reduce rate limiting by their service
-            sleep(StdDuration::from_secs(2)).await;
-            fetch_forecast_with_retry(&logger, tx, &url, max_retries, &city_weather).await;
+            fetch_forecast_with_retry(
+                &logger,
+                tx,
+                &url,
+                max_retries,
+                &city_weather,
+                rate_limiter_cpy,
+            )
+            .await;
         });
     }
 

@@ -5,7 +5,7 @@ use std::{net::SocketAddr, str::FromStr};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let cli = get_config_info();
+    let cli: parquet_file_service::Cli = get_config_info();
     let logger = setup_logger(&cli);
     let weather_data = cli.weather_dir.unwrap_or(String::from("./weather_data"));
     create_folder(&logger, &weather_data.clone());
@@ -20,8 +20,9 @@ async fn main() -> anyhow::Result<()> {
 
     let app = app(
         logger,
+        cli.remote_url
+            .unwrap_or(String::from("http://127.0.0.1:9100")),
         cli.ui_dir.unwrap_or(String::from("./ui")),
-        address.to_string(),
         weather_data,
     );
     Server::bind(&address)

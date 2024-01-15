@@ -2,4 +2,5 @@ level = "info"
 data_dir = "./weather_data"
 ui_dir = "./ui"
 host = "127.0.0.1"
-port = 9100
+port = "9100"
+remote_url = "http://127.0.0.1:9100"

@@ -31,6 +31,7 @@ queryButton.addEventListener('click', runQuery);
 const clearButton = document.getElementById('clearQuery');
 clearButton.addEventListener('click', clearQuerys);
 
+// Setting the date
 const currentUTCDate = new Date();
 const oneDayAgoUTCDate = new Date(currentUTCDate.getTime() - 86400000);
 const rfc3339TimeOneDayAgo = oneDayAgoUTCDate.toISOString();

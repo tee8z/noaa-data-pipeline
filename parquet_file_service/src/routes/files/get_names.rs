@@ -7,7 +7,7 @@ use axum::{
 };
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
-use slog::error;
+use slog::{error, trace, Logger};
 use std::sync::Arc;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::fs;
@@ -51,7 +51,7 @@ pub async fn files(
     State(state): State<Arc<AppState>>,
     Query(params): Query<FileParams>,
 ) -> Result<Json<Files>, AppError> {
-    let file_names = grab_file_names(&state.data_dir, params)
+    let file_names = grab_file_names(&state.logger, &state.data_dir, params)
         .await
         .map_err(|e| {
             error!(state.logger, "error getting filenames: {}", e);
@@ -61,21 +61,29 @@ pub async fn files(
     Ok(Json(files))
 }
 
-async fn grab_file_names(data_dir: &str, params: FileParams) -> Result<Vec<String>, Error> {
+async fn grab_file_names(
+    logger: &Logger,
+    data_dir: &str,
+    params: FileParams,
+) -> Result<Vec<String>, Error> {
     let mut files_names = vec![];
     if let Ok(mut entries) = fs::read_dir(data_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             if let Some(filename) = entry.file_name().to_str() {
                 let file_pieces: Vec<String> = filename.split('_').map(|f| f.to_owned()).collect();
-                let file_generated_at = OffsetDateTime::parse(
-                    &drop_suffix(file_pieces.last().unwrap(), ".parquet"),
-                    &Rfc3339,
-                )
-                .map_err(|_| {
-                    anyhow!("error stored filename does not have a valid rfc3339 datetime in name")
-                })?;
+                let created_time = drop_suffix(file_pieces.last().unwrap(), ".parquet");
+                trace!(logger, "parsed file time:{}", created_time);
+
+                let file_generated_at =
+                    OffsetDateTime::parse(&created_time, &Rfc3339).map_err(|e| {
+                        anyhow!(
+                        "error stored filename does not have a valid rfc3339 datetime in name: {}",
+                        e
+                    )
+                    })?;
                 let mut valid_time_range = true;
                 let file_data_type = file_pieces.first().unwrap();
+                trace!(logger, "parsed file type:{}", file_data_type);
                 if let Some(start) = params.start.clone() {
                     let start_time = OffsetDateTime::parse(&start, &Rfc3339).map_err(|_| {
                         anyhow!("start param value is not a value Rfc3339 datetime")

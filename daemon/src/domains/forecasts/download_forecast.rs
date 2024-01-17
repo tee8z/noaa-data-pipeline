@@ -23,6 +23,7 @@ use std::{collections::HashMap, ops::Add};
 use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime};
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tokio::task::JoinSet;
 use tokio::time::sleep;
 /*
 More Options defined  here:
@@ -674,7 +675,7 @@ pub async fn get_forecasts(
 
     let max_retries = 3;
     let request_counter = Arc::new(AtomicUsize::new(split_maps.len()));
-
+    let mut set = JoinSet::new();
     for city_weather in split_maps {
         let logger = logger.clone();
         let tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>> = tx.clone();
@@ -682,11 +683,11 @@ pub async fn get_forecasts(
         let rate_limiter_cpy = Arc::clone(&rate_limiter);
 
         let counter_clone = Arc::clone(&request_counter);
-        tokio::spawn(async move {
+        set.spawn(async move {
             match fetch_forecast_with_retry(
                 &logger,
                 tx,
-                url,
+                url.clone(),
                 max_retries,
                 &city_weather,
                 rate_limiter_cpy,
@@ -694,9 +695,11 @@ pub async fn get_forecasts(
             .await
             {
                 Ok(_) => {
+                    info!(logger, "completed getting forecast data for: {}", url);
                     counter_clone.fetch_sub(1, Ordering::Relaxed);
                 }
                 Err(_) => {
+                    error!(logger, "error getting forecast data for: {}", url);
                     counter_clone.fetch_sub(1, Ordering::Relaxed);
                 }
             }
@@ -715,12 +718,22 @@ pub async fn get_forecasts(
             }
         }
         let final_value = request_counter.load(Ordering::Relaxed);
-
         if final_value > 0 {
             info!(logger, "waiting for next batch of weather data");
         } else {
             info!(logger, "all request have completed, moving on");
             break;
+        }
+    }
+
+    while let Some(res) = set.join_next().await {
+        match res {
+            Ok(_) => {
+                info!(logger, "task finished")
+            }
+            Err(e) => {
+                error!(logger, "error with task: {}", e)
+            }
         }
     }
 

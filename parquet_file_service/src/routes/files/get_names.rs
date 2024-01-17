@@ -1,37 +1,123 @@
+use crate::AppState;
+use anyhow::{anyhow, Error};
+use axum::{
+    extract::{Query, State},
+    response::{IntoResponse, Response},
+    Json,
+};
+use hyper::StatusCode;
+use serde::{Deserialize, Serialize};
+use slog::error;
 use std::sync::Arc;
-
-use axum::{extract::State, response::IntoResponse, Json};
-use serde::Serialize;
-use slog::{error, Logger};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::fs;
 
-use crate::AppState;
+// Make our own error that wraps `anyhow::Error`.
+pub struct AppError(anyhow::Error);
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error getting file names: {}", self.0),
+        )
+            .into_response()
+    }
+}
+
+impl<E> From<E> for AppError
+where
+    E: Into<anyhow::Error>,
+{
+    fn from(err: E) -> Self {
+        Self(err.into())
+    }
+}
 
 #[derive(Serialize)]
-struct Files {
-    file_names: Vec<String>,
+pub struct Files {
+    pub file_names: Vec<String>,
 }
 
-pub async fn files(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let files = Files {
-        file_names: grab_file_names(&state.logger, &state.data_dir).await,
-    };
-    Json(files)
+#[derive(Clone, Deserialize)]
+pub struct FileParams {
+    pub start: Option<String>,
+    pub end: Option<String>,
+    pub observations: Option<bool>,
+    pub forecasts: Option<bool>,
 }
 
-async fn grab_file_names(logger: &Logger, data_dir: &str) -> Vec<String> {
-    // Read the contents of the directory
+pub async fn files(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<FileParams>,
+) -> Result<Json<Files>, AppError> {
+    let file_names = grab_file_names(&state.data_dir, params)
+        .await
+        .map_err(|e| {
+            error!(state.logger, "error getting filenames: {}", e);
+            e
+        })?;
+    let files = Files { file_names };
+    Ok(Json(files))
+}
+
+async fn grab_file_names(data_dir: &str, params: FileParams) -> Result<Vec<String>, Error> {
     let mut files_names = vec![];
     if let Ok(mut entries) = fs::read_dir(data_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             if let Some(filename) = entry.file_name().to_str() {
-                files_names.push(filename.to_string());
+                let mut add = true;
+                let file_pieces: Vec<String> = filename.split('_').map(|f| f.to_owned()).collect();
+                let file_generated_at = OffsetDateTime::parse(
+                    &drop_suffix(file_pieces.last().unwrap(), ".parquet"),
+                    &Rfc3339,
+                )
+                .map_err(|_| {
+                    anyhow!("error stored filename does not have a valid rfc3339 datetime in name")
+                })?;
+                let file_data_type = file_pieces.first().unwrap();
+                if let Some(start) = params.start.clone() {
+                    let start_time = OffsetDateTime::parse(&start, &Rfc3339).map_err(|_| {
+                        anyhow!("start param value is not a value Rfc3339 datetime")
+                    })?;
+                    if file_generated_at < start_time {
+                        add = false;
+                    }
+                }
+
+                if let Some(end) = params.end.clone() {
+                    let end_time = OffsetDateTime::parse(&end, &Rfc3339)
+                        .map_err(|_| anyhow!("end param value is not a value Rfc3339 datetime"))?;
+                    if file_generated_at > end_time {
+                        add = false;
+                    }
+                }
+
+                if let Some(observations) = params.observations {
+                    if observations && file_data_type.ne("observations") {
+                        add = false;
+                    }
+                }
+
+                if let Some(forecasts) = params.forecasts {
+                    if forecasts && file_data_type.ne("forecasts") {
+                        add = false;
+                    }
+                }
+
+                if add {
+                    files_names.push(filename.to_string());
+                }
             }
         }
-
-        if let Err(err) = entries.next_entry().await {
-            error!(logger, "Error getting entries: {}", err);
-        }
     }
-    files_names
+    Ok(files_names)
+}
+
+fn drop_suffix(input: &str, suffix: &str) -> String {
+    if let Some(stripped) = input.strip_suffix(suffix) {
+        stripped.to_string()
+    } else {
+        input.to_string()
+    }
 }

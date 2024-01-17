@@ -1,7 +1,7 @@
-mod utils;
 mod routes;
 mod startup;
+mod utils;
 
-pub use utils::*;
 pub use routes::*;
 pub use startup::*;
+pub use utils::*;

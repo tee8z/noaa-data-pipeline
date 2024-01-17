@@ -34,6 +34,15 @@ queryButton.addEventListener('click', runQuery);
 const clearButton = document.getElementById('clearQuery');
 clearButton.addEventListener('click', clearQuerys);
 
+const startTime = document.getElementById('start');
+
+const endTime = document.getElementById('end');
+
+const forecasts = document.getElementById('forecasts');
+
+const observations = document.getElementById('observations');
+
+
 // Fetch file names on initial load
 fetchFileNames();
 

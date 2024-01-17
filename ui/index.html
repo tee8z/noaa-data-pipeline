@@ -20,21 +20,28 @@
             </h1>
             <div class="field is-grouped">
                 <div class="control">
-                    <div class="dropdown" id="dropdown">
-                        <div class="dropdown-trigger">
-                            <button id="openDropDown" class="button" aria-haspopup="true" aria-controls="dropdown-menu">
-                                <span>Select Files to download</span>
-                                <span class="icon is-small">
-                                    <i class="fas fa-angle-down" aria-hidden="true"></i>
-                                </span>
-                            </button>
-                        </div>
-                        <div class="dropdown-menu" id="dropdown-menu" role="menu">
-                            <div class="dropdown-content" id="dropdown-content">
-                                <!-- Dropdown items will be dynamically added here -->
-                            </div>
-                        </div>
-                    </div>
+                    <label class="input is-info">
+                        <input id="start" type="datetime" autocomplete="on" min="2024-01-01T00:00:00Z">
+                        Start Time
+                      </label>
+                </div>
+                <div class="control">
+                    <label class="input is-info">
+                        <input id="end" type="datetime" autocomplete="on" max="2035-01-01T00:00:00Z">
+                        End Time
+                      </label>
+                </div>
+                <div class="control">
+                    <label class="checkbox">
+                        <input id="observations" type="checkbox">
+                        Observations
+                      </label>
+                </div>
+                <div class="control">
+                    <label class="checkbox">
+                        <input id="forecasts" type="checkbox">
+                        Forecasts
+                      </label>
                 </div>
                 <div class="control">
                     <button id="submit" class="button is-primary"><span>Download Files</span></button>

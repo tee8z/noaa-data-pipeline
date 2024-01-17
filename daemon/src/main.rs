@@ -20,10 +20,7 @@ async fn main() -> Result<(), anyhow::Error> {
         cli.refill_rate.unwrap_or(15.0_f64),
     )));
 
-    // Run once to start
-    process_data(cli.clone(), logger.clone(), Arc::clone(&rate_limiter)).await?;
-
-    // Run every hour after
+    // Run once every hour
     process_weather_data_hourly(cli, logger, Arc::clone(&rate_limiter)).await;
     Ok(())
 }
@@ -43,24 +40,10 @@ async fn process_weather_data_hourly(
     loop {
         tokio::select! {
             _ = check_channel_interval.tick() => {
-                let mut retry_count = 0;
-                while retry_count < 3 {
                     match process_data(cli.clone(), logger.clone(), rate_limit.clone()).await {
-                        Ok(_) => {
-                            // Break the loop if the processing is successful
-                            break;
-                        }
-                        Err(err) => {
-                            // Log the error or take appropriate action
-                            error!(&logger, "error processing data (trying again): {}", err);
-                            // Increment the retry count
-                            retry_count += 1;
-                        }
+                        Ok(_) => info!(logger, "finished processing data, waiting an hour to run again"),
+                        Err(err) => error!(&logger, "error processing data: {}", err)
                     }
-                }
-                if retry_count > 0 {
-                    error!(&logger, "tried processing three times, giving up until next hour: {}", OffsetDateTime::now_utc());
-                }
             }
             _ = ctrl_c() => {
                 info!(logger, "shutting down");

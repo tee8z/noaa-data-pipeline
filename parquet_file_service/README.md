@@ -1,11 +1,41 @@
-### Get list of files
+### Get list of files (optional params for filtering)
 ##### Request:
 ```
 curl http://localhost:9100/files
 ```
-##### Request:
+##### Response:
 ```json
 {"file_names":["observations_2024-01-14T04:44:22.246930703Z.parquet","forecasts_2024-01-14T04:44:22.246930703Z.parquet"]}
+```
+
+#### Request:
+```
+curl "http://localhost:9100/files?start=2024-01-15T00:00:00.00Z&end=2024-01-16T00:00:00.00Z"
+```
+
+#### Response:
+```json
+{"file_names":["observations_2024-01-15T04:36:33.95238406Z.parquet","forecasts_2024-01-15T04:36:33.95238406Z.parquet"]}
+```
+
+#### Request:
+```
+curl "http://localhost:9100/files?start=2024-01-15T00:00:00.00Z&end=2024-01-16T00:00:00.00Z&forecasts=true"
+```
+
+#### Response:
+```json
+{"file_names":["forecasts_2024-01-15T04:36:33.95238406Z.parquet"]}
+```
+
+#### Request:
+```
+curl "http://localhost:9100/files?start=2024-01-15T00:00:00.00Z&end=2024-01-16T00:00:00.00Z&observations=true"
+```
+
+#### Response:
+```json
+{"file_names":["observations_2024-01-15T04:36:33.95238406Z.parquet"]}
 ```
 
 ### Get a single file

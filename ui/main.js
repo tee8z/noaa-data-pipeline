@@ -110,15 +110,16 @@ async function loadFiles(fileNames) {
     }
     if (Array.isArray(observation_files) && observation_files.length > 0) {
         await conn.query(`
-        CREATE TABLE observations AS SELECT * FROM read_parquet('${observation_files.join(', ')}', union_by_name = true, binary_as_string = true);
+        CREATE TABLE observations AS SELECT * FROM read_parquet(['${observation_files.join('\', \'')}'], union_by_name = true);
         `);
         const observations = await conn.query(`SELECT * FROM observations LIMIT 1;`);
         loadSchema("observations", observations);
     }
 
     if (Array.isArray(forecast_files) && forecast_files.length > 0) {
+        let files = 
         await conn.query(`
-    CREATE TABLE forecasts AS SELECT * FROM read_parquet('${forecast_files.join(', ')}', union_by_name = true, binary_as_string = true);
+    CREATE TABLE forecasts AS SELECT * FROM read_parquet(['${forecast_files.join('\', \'')}'], union_by_name = true);
     `);
         const forecasts = await conn.query(`SELECT * FROM forecasts LIMIT 1;`);
         loadSchema("forecasts", forecasts);

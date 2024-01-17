@@ -81,7 +81,7 @@ impl CityWeather {
     }
     pub fn remove_coordinates(mut self, point: Point) {
         self.city_data
-            .retain(|_, v| !(v.latitude == point.latitude && v.longitude == point.longitude)); 
+            .retain(|_, v| !(v.latitude == point.latitude && v.longitude == point.longitude));
     }
     pub fn get_station_ids(&self) -> HashSet<String> {
         let mut station_ids: HashSet<String> = HashSet::new();

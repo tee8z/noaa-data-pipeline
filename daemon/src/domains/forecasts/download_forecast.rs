@@ -543,7 +543,7 @@ pub async fn fetch_forecast_with_retry(
                         return Ok(());
                     }
                     if bad_coordinate != Point::default() {
-                        url_update = updated_url(bad_coordinate.clone(), &city_weather);
+                        url_update = updated_url(bad_coordinate.clone(), city_weather);
                         info!(
                             logger,
                             "had a bad coordinate {}, trying updated url {}",
@@ -611,7 +611,7 @@ fn find_bad_points(xml: String) -> Point {
         latitude: String::from(""),
         longitude: String::from(""),
     };
-    if let Some(captures) = re.captures(&xml.as_bytes()) {
+    if let Some(captures) = re.captures(xml.as_bytes()) {
         if let (Some(latitude), Some(longitude)) = (captures.get(1), captures.get(2)) {
             if let Ok(latitude_str) = std::str::from_utf8(latitude.as_bytes()) {
                 if let Ok(longitude_str) = std::str::from_utf8(longitude.as_bytes()) {
@@ -679,7 +679,6 @@ pub async fn get_forecasts(
         let logger = logger.clone();
         let tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>> = tx.clone();
         let url = get_url(&city_weather);
-        let max_retries = max_retries;
         let rate_limiter_cpy = Arc::clone(&rate_limiter);
 
         let counter_clone = Arc::clone(&request_counter);

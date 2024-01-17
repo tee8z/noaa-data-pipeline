@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
 pub struct CurrentObservation {
-
     #[serde(rename = "location")]
     pub location: String,
 
@@ -25,7 +24,7 @@ pub struct CurrentObservation {
     pub temperature_string: Option<String>,
 
     #[serde(rename = "temp_f")]
-    pub temp_f:Option<String>,
+    pub temp_f: Option<String>,
 
     #[serde(rename = "temp_c")]
     pub temp_c: Option<String>,
@@ -52,8 +51,8 @@ pub struct CurrentObservation {
     pub dewpoint_string: Option<String>,
 
     #[serde(rename = "dewpoint_f")]
-    pub dewpoint_f:Option<String>,
+    pub dewpoint_f: Option<String>,
 
     #[serde(rename = "dewpoint_c")]
-    pub dewpoint_c:Option<String>,
+    pub dewpoint_c: Option<String>,
 }

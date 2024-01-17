@@ -52,35 +52,35 @@ impl TryFrom<CurrentObservation> for CurrentWeather {
                 .temp_f
                 .unwrap_or(String::from(""))
                 .parse::<f64>()
-                .map(|val| Some(val))
+                .map(Some)
                 .unwrap_or(None),
             temperature_unit_code: Units::Fahrenheit.to_string(),
             relative_humidity: val
                 .relative_humidity
                 .unwrap_or(String::from(""))
                 .parse::<i64>()
-                .map(|val| Some(val))
+                .map(Some)
                 .unwrap_or(None),
             relative_humidity_unit_code: Units::Percent.to_string(),
             wind_direction: val
                 .wind_degrees
                 .unwrap_or(String::from(""))
                 .parse::<i64>()
-                .map(|val| Some(val))
+                .map(Some)
                 .unwrap_or(None),
             wind_direction_unit_code: Units::DegreesTrue.to_string(),
             wind_speed: val
                 .wind_kt
                 .unwrap_or(String::from(""))
                 .parse::<i64>()
-                .map(|val| Some(val))
+                .map(Some)
                 .unwrap_or(None),
             wind_speed_unit_code: Units::Knots.to_string(),
             dewpoint_value: val
                 .dewpoint_f
                 .unwrap_or(String::from(""))
                 .parse::<f64>()
-                .map(|val| Some(val))
+                .map(Some)
                 .unwrap_or(None),
             dewpoint_unit_code: Units::Fahrenheit.to_string(),
         })

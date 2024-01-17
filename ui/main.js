@@ -22,9 +22,6 @@ console.log("api location:", apiBase);
 
 
 // Wire up buttons
-const activeDropDown = document.getElementById("openDropDown");
-activeDropDown.addEventListener('click', openDropDown);
-
 const submitButton = document.getElementById('submit');
 submitButton.addEventListener('click', submitDownloadRequest);
 
@@ -34,70 +31,65 @@ queryButton.addEventListener('click', runQuery);
 const clearButton = document.getElementById('clearQuery');
 clearButton.addEventListener('click', clearQuerys);
 
-// Fetch file names on initial load
-fetchFileNames();
+const currentUTCDate = new Date();
+const oneDayAgoUTCDate = new Date(currentUTCDate.getTime() - 86400000);
+const rfc3339TimeOneDayAgo = oneDayAgoUTCDate.toISOString();
+const startTime = document.getElementById('start');
+startTime.value = rfc3339TimeOneDayAgo;
 
-function fetchFileNames() {
-    fetch(`${apiBase}/files`)
-        .then(response => response.json())
-        .then(data => {
-            const fileNames = data.file_names;
-            populateDropdown(fileNames);
-        })
-        .catch(error => console.error("Error fetching file names:", error));
-}
+const rfc3339TimeUTC = currentUTCDate.toISOString();
+const endTime = document.getElementById('end');
+endTime.value = rfc3339TimeUTC;
 
-function populateDropdown(fileNames) {
-    const dropdownContent = document.getElementById("dropdown-content");
+const forecasts = document.getElementById('forecasts');
+forecasts.checked = true;
 
-    // Clear existing dropdown items
-    dropdownContent.innerHTML = "";
+const observations = document.getElementById('observations');
+observations.checked = true;
 
-    // Add new dropdown items based on file names
-    fileNames.forEach((fileName, index) => {
-        const dropdownItem = document.createElement("a");
-        dropdownItem.href = "#";
-        dropdownItem.id = `${index}_file`;
-        dropdownItem.classList.add("dropdown-item");
-        dropdownItem.textContent = fileName;
-        dropdownItem.addEventListener('click', capture_selection);
+const example_query = document.getElementById('customQuery')
+example_query.value = "SELECT * FROM observations ORDER BY station_id, generated_at DESC LIMIT 200"
 
-        dropdownContent.appendChild(dropdownItem);
-    });
-}
-
-function capture_selection(event) {
-    event.preventDefault();
-    console.log(event.target);
-    const selectedItemId = event.target.id;
-    const clickedElement = document.getElementById(selectedItemId);
-    clickedElement.classList.toggle('is-active');
-}
-
-function openDropDown() {
-    const dropdownContent = document.getElementById("dropdown");
-    dropdownContent.classList.toggle("is-active");
-}
-
+// Download todays files on initial load
+submitDownloadRequest(null);
 
 async function submitDownloadRequest(event) {
-    event.preventDefault();
-    const elements = document.querySelectorAll('[id*="_file"].is-active');
-    console.log(elements);
-
-    let fileNames = [];
-    elements.forEach(function(element) {
-        const textContent = element.textContent;
-        fileNames.push(textContent);
-    });
-    console.log(`Files to download: ${fileNames}`);
-
+    if (event !== null) { event.preventDefault() };
     try {
+        const fileNames = await fetchFileNames();
+        console.log(`Files to download: ${fileNames}`);
         await loadFiles(fileNames);
         console.log('Successfully download parquet files');
     } catch (error) {
         console.error('Error to download files:', error);
     }
+}
+
+function fetchFileNames() {
+    const startTime = document.getElementById('start').value;
+    const endTime = document.getElementById('end').value;
+    const forecasts = document.getElementById('forecasts').checked;
+    const observations = document.getElementById('observations').checked;
+
+    return new Promise((resolve, reject) => {
+        let url = `${apiBase}/files?start=${startTime}&end=${endTime}&observations=${observations}&forecasts=${forecasts}`;
+        console.log(`Requesting: ${url}`)
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log(data);
+                resolve(data.file_names);
+            })
+            .catch(error => {
+                console.error("Error fetching file names:", error)
+                reject(error);
+            });
+    });
 }
 
 async function loadFiles(fileNames) {
@@ -119,7 +111,7 @@ async function loadFiles(fileNames) {
         await conn.query(`
         CREATE TABLE observations AS SELECT * FROM read_parquet('${observation_files.join(', ')}', union_by_name = true, binary_as_string = true);
         `);
-        const observations = await conn.query(`SELECT * FROM observations`);
+        const observations = await conn.query(`SELECT * FROM observations LIMIT 1;`);
         loadSchema("observations", observations);
     }
 
@@ -127,7 +119,7 @@ async function loadFiles(fileNames) {
         await conn.query(`
     CREATE TABLE forecasts AS SELECT * FROM read_parquet('${forecast_files.join(', ')}', union_by_name = true, binary_as_string = true);
     `);
-        const forecasts = await conn.query(`SELECT * FROM forecasts`);
+        const forecasts = await conn.query(`SELECT * FROM forecasts LIMIT 1;`);
         loadSchema("forecasts", forecasts);
     }
     await conn.close();
@@ -214,7 +206,7 @@ function displayQueryErr(err) {
     deleteErr();
     const errorDiv = document.createElement("div");
     errorDiv.id = 'error'
-    errorDiv.innerText = err;
+    errorDiv.value = err;
     errorDiv.classList.add("notification");
     errorDiv.classList.add("is-danger");
     errorDiv.classList.add("is-light");

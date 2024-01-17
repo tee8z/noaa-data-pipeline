@@ -20,25 +20,48 @@
             </h1>
             <div class="field is-grouped">
                 <div class="control">
-                    <div class="dropdown" id="dropdown">
-                        <div class="dropdown-trigger">
-                            <button id="openDropDown" class="button" aria-haspopup="true" aria-controls="dropdown-menu">
-                                <span>Select Files to download</span>
-                                <span class="icon is-small">
-                                    <i class="fas fa-angle-down" aria-hidden="true"></i>
-                                </span>
-                            </button>
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal">
+                            <label class="label">Start</label>
                         </div>
-                        <div class="dropdown-menu" id="dropdown-menu" role="menu">
-                            <div class="dropdown-content" id="dropdown-content">
-                                <!-- Dropdown items will be dynamically added here -->
+                        <div class="field-body">
+                            <div class="field">
+                                <p class="control">
+                                    <input id="start" type="datetime" autocomplete="on" min="2024-01-01T00:00:00Z">
+                                </p>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="control">
-                    <button id="submit" class="button is-primary"><span>Download Files</span></button>
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal">
+                            <label class="label">End</label>
+                        </div>
+                        <div class="field-body">
+                            <div class="field">
+                                <p class="control">
+                                    <input id="end" type="datetime" autocomplete="on" max="2035-01-01T00:00:00Z">
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+                <div class="control">
+                    <label class="checkbox">
+                        <input id="observations" type="checkbox">
+                        Observations
+                    </label>
+                </div>
+                <div class="control">
+                    <label class="checkbox">
+                        <input id="forecasts" type="checkbox">
+                        Forecasts
+                    </label>
+                </div>
+            </div>
+            <div class="control">
+                <button id="submit" class="button is-primary"><span>Download Files</span></button>
             </div>
             <div>
                 <h4>Schemas of the files</h4>
@@ -54,14 +77,15 @@
                 <div class="control">
                     <textarea id="customQuery" class="textarea" placeholder="place custom query here"></textarea>
                 </div>
-                <h4>Learn how to make queries from: <a href="https://duckdb.org/docs/sql/introduction" target="_blank"><span>Query Docs</span></a></h4>
+                <h4>Learn how to make queries from: <a href="https://duckdb.org/docs/sql/introduction"
+                        target="_blank"><span>Query Docs</span></a></h4>
             </div>
             <div class="field is-grouped">
                 <div class="control">
-                    <button id="runQuery" class="button is-info"><span>Run</span></button>
+                    <button id="runQuery" class="button is-info is-light"><span>Run</span></button>
                 </div>
                 <div class="control">
-                    <button id="clearQuery" class="button is-warning"><span>Clear</span></button>
+                    <button id="clearQuery" class="button is-danger is-light"><span>Clear</span></button>
                 </div>
             </div>
             <div class="table-container" id="queryResult-container">

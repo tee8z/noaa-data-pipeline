@@ -37,7 +37,7 @@ pub fn app(logger: Logger, remote_url: String, ui_dir: String, data_dir: String)
         remote_url,
     };
     Router::new()
-        .route("/files", get(files)) //TODO: add filtering based on observation vs forecast and time ranges
+        .route("/files", get(files))
         .route("/file/:file_name", get(download))
         .route("/file/:file_name", post(upload))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // max is in bytes

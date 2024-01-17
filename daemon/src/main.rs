@@ -5,7 +5,6 @@ use daemon::{
 use slog::{debug, error, info, Logger};
 use std::{sync::Arc, time::Duration};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
-use tokio::signal::ctrl_c;
 use tokio::sync::Mutex;
 use tokio::time::interval;
 
@@ -45,10 +44,6 @@ async fn process_weather_data_hourly(
                         Err(err) => error!(&logger, "error processing data: {}", err)
                     }
             }
-            _ = ctrl_c() => {
-                info!(logger, "shutting down");
-                break;
-            },
         }
     }
 }

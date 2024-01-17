@@ -66,7 +66,6 @@ async fn grab_file_names(data_dir: &str, params: FileParams) -> Result<Vec<Strin
     if let Ok(mut entries) = fs::read_dir(data_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             if let Some(filename) = entry.file_name().to_str() {
-                let mut add = true;
                 let file_pieces: Vec<String> = filename.split('_').map(|f| f.to_owned()).collect();
                 let file_generated_at = OffsetDateTime::parse(
                     &drop_suffix(file_pieces.last().unwrap(), ".parquet"),
@@ -75,13 +74,14 @@ async fn grab_file_names(data_dir: &str, params: FileParams) -> Result<Vec<Strin
                 .map_err(|_| {
                     anyhow!("error stored filename does not have a valid rfc3339 datetime in name")
                 })?;
+                let mut valid_time_range = true;
                 let file_data_type = file_pieces.first().unwrap();
                 if let Some(start) = params.start.clone() {
                     let start_time = OffsetDateTime::parse(&start, &Rfc3339).map_err(|_| {
                         anyhow!("start param value is not a value Rfc3339 datetime")
                     })?;
                     if file_generated_at < start_time {
-                        add = false;
+                        valid_time_range = false;
                     }
                 }
 
@@ -89,24 +89,30 @@ async fn grab_file_names(data_dir: &str, params: FileParams) -> Result<Vec<Strin
                     let end_time = OffsetDateTime::parse(&end, &Rfc3339)
                         .map_err(|_| anyhow!("end param value is not a value Rfc3339 datetime"))?;
                     if file_generated_at > end_time {
-                        add = false;
+                        valid_time_range = false;
                     }
                 }
 
                 if let Some(observations) = params.observations {
-                    if observations && file_data_type.ne("observations") {
-                        add = false;
+                    if observations && file_data_type.eq("observations") {
+                        if valid_time_range {
+                            files_names.push(filename.to_owned())
+                        }
                     }
                 }
 
                 if let Some(forecasts) = params.forecasts {
-                    if forecasts && file_data_type.ne("forecasts") {
-                        add = false;
+                    if forecasts && file_data_type.eq("forecasts") {
+                        if valid_time_range {
+                            files_names.push(filename.to_owned())
+                        }
                     }
                 }
 
-                if add {
-                    files_names.push(filename.to_string());
+                if params.forecasts.is_none() && params.observations.is_none() {
+                    if valid_time_range {
+                        files_names.push(filename.to_owned())
+                    }
                 }
             }
         }

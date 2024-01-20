@@ -173,7 +173,7 @@ pub fn create_forecast_schema() -> Type {
         .build()
         .unwrap();
 
-    let min_temp = Type::primitive_type_builder("max_temp", PhysicalType::INT64)
+    let min_temp = Type::primitive_type_builder("min_temp", PhysicalType::INT64)
         .with_repetition(Repetition::OPTIONAL)
         .build()
         .unwrap();
@@ -423,15 +423,6 @@ fn add_data(
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
-            MaximumRelative => {
-                if let Some(index) = time_interval_index {
-                    current_data.relative_humidity_max = data
-                        .value
-                        .get(index)
-                        .and_then(|value: &String| value.parse::<i64>().ok());
-                }
-                current_data.relative_humidity_unit_code = data.units.to_string();
-            }
             Minimum => {
                 if let Some(index) = time_interval_index {
                     current_data.min_temp = data
@@ -440,6 +431,15 @@ fn add_data(
                         .and_then(|value: &String| value.parse::<i64>().ok());
                 }
                 current_data.temperature_unit_code = data.units.to_string();
+            }
+            MaximumRelative => {
+                if let Some(index) = time_interval_index {
+                    current_data.relative_humidity_max = data
+                        .value
+                        .get(index)
+                        .and_then(|value: &String| value.parse::<i64>().ok());
+                }
+                current_data.relative_humidity_unit_code = data.units.to_string();
             }
             MinimumRelative => {
                 if let Some(index) = time_interval_index {
@@ -528,6 +528,7 @@ impl ForecastRetry {
         url: String,
         city_weather: &CityWeather,
     ) -> Result<(), Error> {
+        info!(self.logger, "url: {}", url);
         loop {
             match self.fetcher.fetch_xml(&url).await {
                 Ok(xml) => {

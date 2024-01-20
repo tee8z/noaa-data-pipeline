@@ -594,12 +594,12 @@ impl ForecastService {
     }
     pub async fn get_forecasts(&self, city_weather: &CityWeather) -> Result<Vec<Forecast>, Error> {
         let split_maps = split_cityweather(city_weather.clone(), 50);
-
+        let total_requests = split_maps.len();
         let (tx, mut rx) =
-            mpsc::channel::<Result<HashMap<String, Vec<WeatherForecast>>, Error>>(split_maps.len());
+            mpsc::channel::<Result<HashMap<String, Vec<WeatherForecast>>, Error>>(total_requests);
 
         let max_retries = 3;
-        let request_counter = Arc::new(AtomicUsize::new(split_maps.len()));
+        let request_counter = Arc::new(AtomicUsize::new(total_requests));
         let mut set = JoinSet::new();
         for city_weather in split_maps {
             let tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>> = tx.clone();
@@ -641,9 +641,17 @@ impl ForecastService {
                     error!(self.logger, "Error fetching forecast data: {}", err);
                 }
             }
-            let final_value = request_counter.load(Ordering::Relaxed);
-            if final_value > 0 {
-                info!(self.logger, "waiting for next batch of weather data");
+            let batches_left = request_counter.load(Ordering::Relaxed);
+            if batches_left > 0 {
+                let progress = ((total_requests as f64 - batches_left as f64)
+                    / total_requests as f64)
+                    * 100 as f64;
+                info!(
+                    self.logger,
+                    "waiting for next batch of weather data, batches left: {} progress: {:.2}%",
+                    batches_left,
+                    progress
+                );
             } else {
                 info!(self.logger, "all request have completed, moving on");
                 break;

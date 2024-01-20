@@ -58,7 +58,7 @@ pub fn save_forecasts(forecast: Vec<Forecast>, root_path: &str, file_name: Strin
 
 pub async fn send_parquet_files(
     cli: &Cli,
-    logger: Logger,
+    logger: &Logger,
     observation_relative_file_path: String,
     forecast_relative_file_path_file: String,
 ) -> Result<(), Error> {

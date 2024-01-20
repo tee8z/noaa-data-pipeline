@@ -3,8 +3,7 @@ use crate::Type::{
     ProbabilityOfPrecipitationWithin12Hours, Sustained, Wind,
 };
 use crate::{
-    fetch_xml, split_cityweather, CityWeather, DataReading, Dwml, Location, Point, RateLimiter,
-    Units, WeatherStation,
+    split_cityweather, CityWeather, DataReading, Dwml, Location, Units, WeatherStation, XmlFetcher,
 };
 use anyhow::{anyhow, Error};
 use core::time::Duration as StdDuration;
@@ -14,15 +13,15 @@ use parquet::{
     schema::types::Type,
 };
 use parquet_derive::ParquetRecordWriter;
-use regex::bytes::Regex;
 use serde_xml_rs::from_str;
 use slog::{debug, error, info, Logger};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{collections::HashMap, ops::Add};
-use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime};
+use time::{
+    format_description::well_known::Rfc3339, macros::format_description, Duration, OffsetDateTime,
+};
 use tokio::sync::mpsc;
-use tokio::sync::Mutex;
 use tokio::task::JoinSet;
 use tokio::time::sleep;
 /*
@@ -510,250 +509,189 @@ fn add_data(
     Ok(())
 }
 
-pub async fn fetch_forecast_with_retry(
-    logger: &Logger,
-    tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>>,
-    url: String,
-    max_retries: usize,
-    city_weather: &CityWeather,
-    rate_limit: Arc<Mutex<RateLimiter>>,
-) -> Result<(), Error> {
-    let mut retries = 0;
-    let mut url_update = url;
-    loop {
-        match fetch_xml(logger, url_update.as_str(), rate_limit.clone()).await {
-            Ok(xml) => {
-                let mut bad_coordinate = Point::default();
-                let converted_xml: Dwml = match from_str(&xml) {
-                    Ok(xml) => xml,
-                    Err(err) => {
-                        if xml.contains("is not on an NDFD grid") {
-                            bad_coordinate = find_bad_points(xml.clone());
-                        }
-                        error!(
-                            logger,
-                            "error converting xml: {} \n raw string: {}", err, xml
-                        );
-                        Dwml::default()
-                    }
-                };
-                if converted_xml == Dwml::default() {
-                    info!(logger, "no current forecast xml found, skipping converting");
-                    if let Err(err) = tx.send(Ok(HashMap::new())).await {
-                        error!(logger, "Error sending result through channel: {}", err);
-                        return Ok(());
-                    }
-                    if bad_coordinate != Point::default() {
-                        url_update = updated_url(bad_coordinate.clone(), city_weather);
-                        info!(
-                            logger,
-                            "had a bad coordinate {}, trying updated url {}",
-                            bad_coordinate,
-                            url_update
-                        );
-                        if retries >= max_retries {
-                            // Send the error through the channel
-                            if let Err(err) = tx
-                                .send(Err(anyhow!("had bad coordinate, unable to get data")))
-                                .await
-                            {
-                                error!(logger, "Error sending error through channel: {}", err);
-                            }
+pub struct ForecastRetry {
+    pub tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>>,
+    pub max_retries: usize,
+    pub fetcher: Arc<XmlFetcher>,
+    pub logger: Logger,
+}
 
-                            return Ok(());
-                        }
-                        retries += 1;
-                        continue;
-                    }
-                    return Ok(());
-                }
-                let weather_with_stations = add_station_ids(city_weather, converted_xml);
-                let current_forecast_data: HashMap<String, Vec<WeatherForecast>> =
-                    match weather_with_stations.try_into() {
-                        Ok(weather) => weather,
+impl ForecastRetry {
+    pub fn new(
+        tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>>,
+        max_retries: usize,
+        fetcher: Arc<XmlFetcher>,
+        logger: Logger,
+    ) -> Self {
+        ForecastRetry {
+            tx,
+            max_retries,
+            fetcher,
+            logger,
+        }
+    }
+
+    pub async fn fetch_forecast_with_retry(
+        &self,
+        url: String,
+        city_weather: &CityWeather,
+    ) -> Result<(), Error> {
+        loop {
+            match self.fetcher.fetch_xml(&url).await {
+                Ok(xml) => {
+                    let converted_xml: Dwml = match from_str(&xml) {
+                        Ok(xml) => xml,
                         Err(err) => {
-                            error!(logger, "error converting to Forecast: {}", err);
-
-                            HashMap::new()
+                            error!(
+                                self.logger,
+                                "error converting xml: {} \n raw string: {}", err, xml
+                            );
+                            Dwml::default()
                         }
                     };
-                if current_forecast_data.is_empty() {
-                    info!(logger, "no current forecast data found");
-                    return Ok(());
-                }
-                // Send the result through the channel
-                if let Err(err) = tx.send(Ok(current_forecast_data)).await {
-                    error!(logger, "Error sending result through channel: {}", err);
-                }
+                    if converted_xml == Dwml::default() {
+                        info!(
+                            self.logger,
+                            "no current forecast xml found, skipping converting"
+                        );
+                        if let Err(err) = self.tx.send(Ok(HashMap::new())).await {
+                            error!(self.logger, "Error sending result through channel: {}", err);
+                            return Ok(());
+                        }
+                        return Ok(());
+                    }
+                    let weather_with_stations = add_station_ids(city_weather, converted_xml);
+                    let current_forecast_data: HashMap<String, Vec<WeatherForecast>> =
+                        match weather_with_stations.try_into() {
+                            Ok(weather) => weather,
+                            Err(err) => {
+                                error!(self.logger, "error converting to Forecast: {}", err);
 
-                return Ok(());
-            }
-            Err(err) => {
-                if retries >= max_retries {
-                    // Send the error through the channel
-                    if let Err(err) = tx.send(Err(err)).await {
-                        error!(logger, "Error sending error through channel: {}", err);
+                                HashMap::new()
+                            }
+                        };
+                    if current_forecast_data.is_empty() {
+                        info!(self.logger, "no current forecast data found");
+                        return Ok(());
+                    }
+                    // Send the result through the channel
+                    if let Err(err) = self.tx.send(Ok(current_forecast_data)).await {
+                        error!(self.logger, "Error sending result through channel: {}", err);
                     }
 
                     return Ok(());
                 }
-                retries += 1;
-                // Log the error and retry after a delay
-                error!(logger, "Error fetching XML (retry {}): {}", retries, err);
-                sleep(StdDuration::from_secs(5)).await;
-            }
-        }
-    }
-}
-
-fn find_bad_points(xml: String) -> Point {
-    let re = Regex::new(r#"latitude "(-?\d+\.\d+)" longitude "(-?\d+\.\d+)"#).unwrap();
-    let mut point = Point {
-        latitude: String::from(""),
-        longitude: String::from(""),
-    };
-    if let Some(captures) = re.captures(xml.as_bytes()) {
-        if let (Some(latitude), Some(longitude)) = (captures.get(1), captures.get(2)) {
-            if let Ok(latitude_str) = std::str::from_utf8(latitude.as_bytes()) {
-                if let Ok(longitude_str) = std::str::from_utf8(longitude.as_bytes()) {
-                    let latitude_value = latitude_str.to_string();
-                    let longitude_value = longitude_str.to_string();
-                    point.latitude = latitude_value;
-                    point.longitude = longitude_value;
+                Err(err) => {
+                    // Log the error and retry after a delay
+                    error!(self.logger, "Error fetching XML: {}", err);
+                    sleep(StdDuration::from_secs(5)).await;
                 }
             }
         }
     }
-    point
 }
 
-pub fn updated_url(bad_coordinate: Point, city_weather: &CityWeather) -> String {
-    let modified_map: HashMap<String, WeatherStation> = city_weather
-        .city_data
-        .iter()
-        .filter(|&(_, v)| {
-            !(v.latitude == bad_coordinate.latitude && v.longitude == bad_coordinate.longitude)
-        })
-        .map(|(k, v)| {
-            (
-                k.clone(),
-                WeatherStation {
-                    station_id: v.station_id.clone(),
-                    latitude: v.latitude.clone(),
-                    longitude: v.longitude.clone(),
-                    station_name: v.station_name.clone(),
-                },
-            )
-        })
-        .collect();
-    let coordinates = modified_map
-        .values()
-        .map(|weather_station| {
-            format!("{},{}", weather_station.latitude, weather_station.longitude)
-        })
-        .collect::<Vec<String>>()
-        .join("%20");
-    let current_time = OffsetDateTime::now_utc();
-    let format_description = Rfc3339;
-    let now = current_time.format(&format_description).unwrap();
-    // Define the duration of one week (7 days)
-    let one_week_duration = Duration::weeks(1);
-    let one_week_from_now = current_time.add(one_week_duration);
-    let one_week = one_week_from_now.format(&format_description).unwrap();
-    format!("https://graphical.weather.gov/xml/sample_products/browser_interface/ndfdXMLclient.php?listLatLon={}&product=time-series&begin={}&end={}&Unit=e&maxt=maxt&mint=mint&wspd=wspd&wdir=wdir&pop12=pop12&qpf=qpf&maxrh=maxrh&minrh=minrh", coordinates,now,one_week)
+pub struct ForecastService {
+    pub fetcher: Arc<XmlFetcher>,
+    pub logger: Logger,
 }
 
-pub async fn get_forecasts(
-    logger: &Logger,
-    city_weather: &CityWeather,
-    rate_limiter: Arc<Mutex<RateLimiter>>,
-) -> Result<Vec<Forecast>, Error> {
-    let split_maps = split_cityweather(city_weather.clone(), 50);
+impl ForecastService {
+    pub fn new(logger: Logger, fetcher: Arc<XmlFetcher>) -> Self {
+        ForecastService { logger, fetcher }
+    }
+    pub async fn get_forecasts(&self, city_weather: &CityWeather) -> Result<Vec<Forecast>, Error> {
+        let split_maps = split_cityweather(city_weather.clone(), 50);
 
-    let (tx, mut rx) =
-        mpsc::channel::<Result<HashMap<String, Vec<WeatherForecast>>, Error>>(split_maps.len());
+        let (tx, mut rx) =
+            mpsc::channel::<Result<HashMap<String, Vec<WeatherForecast>>, Error>>(split_maps.len());
 
-    let max_retries = 3;
-    let request_counter = Arc::new(AtomicUsize::new(split_maps.len()));
-    let mut set = JoinSet::new();
-    for city_weather in split_maps {
-        let logger = logger.clone();
-        let tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>> = tx.clone();
-        let url = get_url(&city_weather);
-        let rate_limiter_cpy = Arc::clone(&rate_limiter);
+        let max_retries = 3;
+        let request_counter = Arc::new(AtomicUsize::new(split_maps.len()));
+        let mut set = JoinSet::new();
+        for city_weather in split_maps {
+            let tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>> = tx.clone();
+            let url = get_url(&city_weather);
+            let counter_clone = Arc::clone(&request_counter);
+            let forecast_retry =
+                ForecastRetry::new(tx, max_retries, self.fetcher.clone(), self.logger.clone());
+            let logger_cpy = self.logger.clone();
 
-        let counter_clone = Arc::clone(&request_counter);
-        set.spawn(async move {
-            match fetch_forecast_with_retry(
-                &logger,
-                tx,
-                url.clone(),
-                max_retries,
-                &city_weather,
-                rate_limiter_cpy,
-            )
-            .await
-            {
+            set.spawn(async move {
+                match forecast_retry
+                    .fetch_forecast_with_retry(url.clone(), &city_weather)
+                    .await
+                {
+                    Ok(_) => {
+                        info!(&logger_cpy, "completed getting forecast data for: {}", url);
+                        counter_clone.fetch_sub(1, Ordering::Relaxed);
+                    }
+                    Err(_) => {
+                        error!(&logger_cpy, "error getting forecast data for: {}", url);
+                        counter_clone.fetch_sub(1, Ordering::Relaxed);
+                    }
+                }
+            });
+        }
+
+        let mut forecast_data = HashMap::new();
+        while let Some(result) = rx.recv().await {
+            match result {
+                Ok(data) => {
+                    info!(
+                        self.logger,
+                        "found more forecast data for: {:?}",
+                        data.keys()
+                    );
+                    forecast_data.extend(data);
+                }
+                Err(err) => {
+                    error!(self.logger, "Error fetching forecast data: {}", err);
+                }
+            }
+            let final_value = request_counter.load(Ordering::Relaxed);
+            if final_value > 0 {
+                info!(self.logger, "waiting for next batch of weather data");
+            } else {
+                info!(self.logger, "all request have completed, moving on");
+                break;
+            }
+        }
+
+        while let Some(res) = set.join_next().await {
+            match res {
                 Ok(_) => {
-                    info!(logger, "completed getting forecast data for: {}", url);
-                    counter_clone.fetch_sub(1, Ordering::Relaxed);
+                    info!(self.logger, "task finished")
                 }
-                Err(_) => {
-                    error!(logger, "error getting forecast data for: {}", url);
-                    counter_clone.fetch_sub(1, Ordering::Relaxed);
+                Err(e) => {
+                    error!(self.logger, "error with task: {}", e)
                 }
             }
-        });
-    }
-
-    let mut forecast_data = HashMap::new();
-    while let Some(result) = rx.recv().await {
-        match result {
-            Ok(data) => {
-                info!(logger, "found more forecast data for: {:?}", data.keys());
-                forecast_data.extend(data);
-            }
-            Err(err) => {
-                error!(logger, "Error fetching forecast data: {}", err);
-            }
         }
-        let final_value = request_counter.load(Ordering::Relaxed);
-        if final_value > 0 {
-            info!(logger, "waiting for next batch of weather data");
-        } else {
-            info!(logger, "all request have completed, moving on");
-            break;
-        }
-    }
 
-    while let Some(res) = set.join_next().await {
-        match res {
-            Ok(_) => {
-                info!(logger, "task finished")
-            }
-            Err(e) => {
-                error!(logger, "error with task: {}", e)
+        info!(self.logger, "done waiting for data, contining");
+        let mut forecasts = vec![];
+        for all_forecasts in forecast_data.values() {
+            for weather_forecats in all_forecasts {
+                let current = weather_forecats.clone();
+                debug!(
+                    self.logger.clone(),
+                    "current weather forecast: {:?}", current
+                );
+                let mut forecast: Forecast = current.try_into()?;
+                debug!(
+                    self.logger.clone(),
+                    "parquet format forecast: {:?}", forecast
+                );
+                let city = city_weather.city_data.get(&forecast.station_id).unwrap();
+                forecast.station_name = city.station_name.clone();
+                forecasts.push(forecast)
             }
         }
-    }
 
-    info!(logger, "done waiting for data, contining");
-    let mut forecasts = vec![];
-    for all_forecasts in forecast_data.values() {
-        for weather_forecats in all_forecasts {
-            let current = weather_forecats.clone();
-            debug!(logger.clone(), "current weather forecast: {:?}", current);
-            let mut forecast: Forecast = current.try_into()?;
-            debug!(logger.clone(), "parquet format forecast: {:?}", forecast);
-            let city = city_weather.city_data.get(&forecast.station_id).unwrap();
-            forecast.station_name = city.station_name.clone();
-            forecasts.push(forecast)
-        }
+        Ok(forecasts)
     }
-
-    Ok(forecasts)
 }
-
 fn get_forecasts_ranges(
     location: &Location,
     generated_at: OffsetDateTime,
@@ -856,12 +794,34 @@ fn compare_coordinates(weather_station: &WeatherStation, latitude: &str, longitu
 }
 
 fn get_url(city_weather: &CityWeather) -> String {
-    let current_time = OffsetDateTime::now_utc();
-    let format_description = Rfc3339;
+    // Get the current time
+    let mut current_time = OffsetDateTime::now_utc();
+
+    // Round to the nearest hour
+    if current_time.minute() > 30 {
+        current_time = current_time
+            .replace_hour(current_time.hour() + 1)
+            .unwrap()
+            .replace_minute(0)
+            .unwrap()
+            .replace_second(0)
+            .unwrap();
+    } else {
+        current_time = current_time
+            .replace_minute(0)
+            .unwrap()
+            .replace_second(0)
+            .unwrap();
+    }
+
+    // Format the rounded current time
+    let format_description = format_description!("[year]-[month padding:zero]-[day padding:zero]T[hour padding:zero]:[minute padding:zero]:[second padding:zero]");
     let now = current_time.format(&format_description).unwrap();
+
     // Define the duration of one week (7 days)
     let one_week_duration = Duration::weeks(1);
     let one_week_from_now = current_time.add(one_week_duration);
+
     let one_week = one_week_from_now.format(&format_description).unwrap();
     format!("https://graphical.weather.gov/xml/sample_products/browser_interface/ndfdXMLclient.php?listLatLon={}&product=time-series&begin={}&end={}&Unit=e&maxt=maxt&mint=mint&wspd=wspd&wdir=wdir&pop12=pop12&qpf=qpf&maxrh=maxrh&minrh=minrh", city_weather.get_coordinates_url(),now,one_week)
 }

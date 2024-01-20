@@ -4,12 +4,9 @@ use std::{
     sync::Arc,
 };
 
+use crate::{Point, XmlFetcher};
 use anyhow::Error;
 use serde::{Deserialize, Serialize};
-use slog::Logger;
-use tokio::sync::Mutex;
-
-use crate::{fetch_xml, Point, RateLimiter};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct WeatherStation {
@@ -75,7 +72,11 @@ impl CityWeather {
         self.city_data
             .values()
             .map(|weather_station| {
-                format!("{},{}", weather_station.latitude, weather_station.longitude)
+                format!(
+                    "{},{}",
+                    weather_station.get_latitude(),
+                    weather_station.get_longitude()
+                )
             })
             .collect::<Vec<String>>()
     }
@@ -122,26 +123,27 @@ pub fn split_cityweather(original: CityWeather, max_keys_per_map: usize) -> Vec<
     result
 }
 
-pub async fn get_coordinates(
-    logger: &Logger,
-    rate_limit: Arc<Mutex<RateLimiter>>,
-) -> Result<CityWeather, Error> {
+static STATE_ABBERVIATIONS: &[&str] = &[
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA",
+    "KS", "KY", "LA", "ME", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR",
+    "MD", "MA", "MI", "MN", "MS", "MO", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
+    "WV", "WI", "WY",
+];
+
+pub async fn get_coordinates(fetcher: Arc<XmlFetcher>) -> Result<CityWeather, Error> {
     let mut city_data: HashMap<String, WeatherStation> = HashMap::new();
-    let raw_xml = fetch_xml(
-        logger,
-        "https://w1.weather.gov/xml/current_obs/index.xml",
-        rate_limit,
-    )
-    .await?;
+    let raw_xml = fetcher
+        .fetch_xml("https://w1.weather.gov/xml/current_obs/index.xml")
+        .await?;
     let converted_xml: WxStationIndex = serde_xml_rs::from_str(&raw_xml)?;
 
     for station in converted_xml.station {
-        let weather_station: WeatherStation = station.clone().into();
-        if weather_station.station_name.contains("Airport")
-            || weather_station.station_name.contains("Airfield")
-        {
-            city_data.insert(station.station_id, weather_station);
+        // Skip any place not in the US
+        if !STATE_ABBERVIATIONS.contains(&station.state.as_str()) {
+            continue;
         }
+        let weather_station: WeatherStation = station.clone().into();
+        city_data.insert(station.station_id, weather_station);
     }
 
     Ok(CityWeather { city_data })

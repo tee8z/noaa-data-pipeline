@@ -2,3 +2,4 @@ level = "info"
 base_url = "http://localhost:9100"
 data_dir = "./data"
 sleep_interval = 3600
+user_agent = "noaa-data-pipeline/1.0 tee8z@protonmail.com"

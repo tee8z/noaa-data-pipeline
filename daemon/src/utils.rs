@@ -15,6 +15,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
+
 #[derive(Parser, Clone, Debug, serde::Deserialize)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
@@ -45,6 +46,10 @@ pub struct Cli {
     /// How man tokens can be used within the refill rate (default: 3)
     #[arg(short, long)]
     pub token_capacity: Option<usize>,
+
+    /// User agent, header sent to NOAA's api to allow them to connect you
+    #[arg(short, long)]
+    pub user_agent: Option<String>,
 }
 
 pub fn get_config_info() -> Cli {
@@ -139,69 +144,79 @@ impl RateLimiter {
     }
 }
 
-pub async fn fetch_xml(
-    logger: &Logger,
-    url: &str,
+pub struct XmlFetcher {
+    logger: Logger,
+    user_agent: String,
     rate_limiter: Arc<Mutex<RateLimiter>>,
-) -> Result<String, Error> {
-    let mut limiter = rate_limiter.lock().await;
-    if !limiter.try_acquire(1.0) {
-        // This happens after waitin and trying 3 times
-        return Err(anyhow!("Rate limit exceeded after retries"));
-    }
-
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    let client = ClientBuilder::new(Client::builder().user_agent("fetching_data/1.0").build()?)
-        .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-        .build();
-
-    debug!(logger.clone(), "requesting: {}", url);
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| anyhow!("error sending request: {}", e))?;
-    match response.text().await {
-        Ok(xml_content) => Ok(xml_content),
-        Err(e) => Err(anyhow!("error parsing body of request: {}", e)),
-    }
 }
 
-pub async fn fetch_xml_zip(
-    logger: &Logger,
-    url: &str,
-    rate_limiter: Arc<Mutex<RateLimiter>>,
-) -> Result<File, Error> {
-    let mut limiter = rate_limiter.lock().await;
-    if !limiter.try_acquire(1.0) {
-        // This happens after waitin and trying 3 times
-        return Err(anyhow!("Rate limit exceeded after retries"));
+impl XmlFetcher {
+    pub fn new(
+        logger: Logger,
+        user_agent: String,
+        rate_limiter: Arc<Mutex<RateLimiter>>,
+    ) -> XmlFetcher {
+        Self {
+            logger,
+            user_agent,
+            rate_limiter,
+        }
     }
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    let client = ClientBuilder::new(Client::builder().user_agent("fetching_data/1.0").build()?)
-        .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-        .build();
+    pub async fn fetch_xml(&self, url: &str) -> Result<String, Error> {
+        let mut limiter = self.rate_limiter.lock().await;
+        if !limiter.try_acquire(1.0) {
+            // This happens after waitin and trying 3 times
+            return Err(anyhow!("Rate limit exceeded after retries"));
+        }
 
-    debug!(logger.clone(), "requesting: {}", url);
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| anyhow!("error sending request: {}", e))?;
-    if !response.status().is_success() {
-        return Err(anyhow!("error response from request"));
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+        let client = ClientBuilder::new(Client::builder().user_agent(&self.user_agent).build()?)
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .build();
+
+        debug!(self.logger, "requesting: {}", url);
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| anyhow!("error sending request: {}", e))?;
+        match response.text().await {
+            Ok(xml_content) => Ok(xml_content),
+            Err(e) => Err(anyhow!("error parsing body of request: {}", e)),
+        }
     }
+    pub async fn fetch_xml_zip(&self, url: &str) -> Result<File, Error> {
+        let mut limiter = self.rate_limiter.lock().await;
+        if !limiter.try_acquire(1.0) {
+            // This happens after waitin and trying 3 times
+            return Err(anyhow!("Rate limit exceeded after retries"));
+        }
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+        let client = ClientBuilder::new(Client::builder().user_agent(&self.user_agent).build()?)
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .build();
 
-    let mut temp_file = tempfile::tempfile().unwrap();
-    let mut body = response.bytes_stream();
-    while let Some(chunk) = body.next().await {
-        let chunk = chunk?;
-        temp_file.write_all(&chunk)?;
+        debug!(self.logger, "requesting: {}", url);
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| anyhow!("error sending request: {}", e))?;
+        if !response.status().is_success() {
+            return Err(anyhow!("error response from request"));
+        }
+
+        let mut temp_file = tempfile::tempfile().unwrap();
+        let mut body = response.bytes_stream();
+        while let Some(chunk) = body.next().await {
+            let chunk = chunk?;
+            temp_file.write_all(&chunk)?;
+        }
+
+        temp_file.sync_all()?;
+
+        Ok(temp_file)
     }
-
-    temp_file.sync_all()?;
-
-    Ok(temp_file)
 }
 
 pub fn get_full_path(relative_path: String) -> String {

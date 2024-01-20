@@ -1,6 +1,7 @@
 use daemon::{
-    create_folder, get_config_info, get_coordinates, get_forecasts, get_observations,
-    save_forecasts, save_observations, send_parquet_files, setup_logger, Cli, RateLimiter,
+    create_folder, get_config_info, get_coordinates, save_forecasts, save_observations,
+    send_parquet_files, setup_logger, Cli, ForecastService, ObservationService, RateLimiter,
+    XmlFetcher,
 };
 use slog::{debug, error, info, Logger};
 use std::{sync::Arc, time::Duration};
@@ -53,22 +54,35 @@ async fn process_data(
     logger: Logger,
     rate_limiter: Arc<Mutex<RateLimiter>>,
 ) -> Result<(), anyhow::Error> {
-    let rate_limiter_coordinates = Arc::clone(&rate_limiter);
-    let city_weather_coordinates = get_coordinates(&logger, rate_limiter_coordinates).await?;
-    debug!(logger, "coordinates: {}", city_weather_coordinates);
-    let rate_limiter_forecast = Arc::clone(&rate_limiter);
-    let forecasts =
-        get_forecasts(&logger, &city_weather_coordinates, rate_limiter_forecast).await?;
-    debug!(logger, "forecasts: {:?}", forecasts);
-    let rate_limiter_observation = Arc::clone(&rate_limiter);
+    let logger_cpy = &logger.clone();
+    let fetcher = Arc::new(XmlFetcher::new(
+        logger.clone(),
+        cli.user_agent
+            .clone()
+            .unwrap_or(String::from("noaa-data-pipeline/1.0")),
+        rate_limiter,
+    ));
 
-    let observations =
-        get_observations(&logger, &city_weather_coordinates, rate_limiter_observation).await?;
-    debug!(logger, "observations: {:?}", observations);
+    let city_weather_coordinates = get_coordinates(fetcher.clone()).await?;
+
+    debug!(logger_cpy, "coordinates: {}", city_weather_coordinates);
+
+    let forecast_service = ForecastService::new(logger.clone(), fetcher.clone());
+    let forecasts = forecast_service
+        .get_forecasts(&city_weather_coordinates)
+        .await?;
+    debug!(logger_cpy, "forecasts: {:?}", forecasts);
+
+    let observation_service = ObservationService::new(logger, fetcher);
+    let observations = observation_service
+        .get_observations(&city_weather_coordinates)
+        .await?;
+
+    debug!(logger_cpy, "observations: {:?}", observations);
     let current_utc_time: String = OffsetDateTime::now_utc().format(&Rfc3339)?;
     let root_path = cli.data_dir.clone().unwrap_or(String::from("./data"));
 
-    create_folder(&root_path, &logger);
+    create_folder(&root_path, logger_cpy);
     let forecast_parquet = save_forecasts(
         forecasts,
         &root_path,
@@ -79,6 +93,6 @@ async fn process_data(
         &root_path,
         format!("{}_{}", "observations", current_utc_time),
     );
-    send_parquet_files(&cli, logger, observation_parquet, forecast_parquet).await?;
+    send_parquet_files(&cli, logger_cpy, observation_parquet, forecast_parquet).await?;
     Ok(())
 }

@@ -330,29 +330,40 @@ impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
             let weather_forecast = get_forecasts_ranges(location, generated_at);
             weather.insert(location.location_key.clone(), weather_forecast);
         });
-
+        // Used to pull the data forward from last time we had a forecast for a value
+        let mut prev_weather = weather.clone();
         for parameter_point in raw_data.data.parameters {
             let location_key = parameter_point.applicable_location.clone();
             let weather_data = weather.get_mut(&location_key).unwrap();
+            let prev_forecast_val: &mut WeatherForecast = prev_weather
+                .get_mut(&location_key)
+                .unwrap()
+                .first_mut()
+                .unwrap();
 
             if let Some(temps) = parameter_point.temperature {
                 for temp in temps {
                     // We want this to panic, we should never have a time layout that doesn't exist in the map
                     let temp_times = time_layouts.get(&temp.time_layout).unwrap();
-                    add_data(weather_data, temp_times, &temp)?;
+                    add_data(weather_data, temp_times, &temp, prev_forecast_val)?;
                 }
             }
 
             if let Some(humidities) = parameter_point.humidity {
                 for humidity in humidities {
                     let humidity_times = time_layouts.get(&humidity.time_layout).unwrap();
-                    add_data(weather_data, humidity_times, &humidity)?;
+                    add_data(weather_data, humidity_times, &humidity, prev_forecast_val)?;
                 }
             }
 
             if let Some(precipitation) = parameter_point.precipitation {
                 let precipitation_times = time_layouts.get(&precipitation.time_layout).unwrap();
-                add_data(weather_data, precipitation_times, &precipitation)?;
+                add_data(
+                    weather_data,
+                    precipitation_times,
+                    &precipitation,
+                    prev_forecast_val,
+                )?;
             }
 
             if let Some(probability_of_precipitation) = parameter_point.probability_of_precipitation
@@ -364,17 +375,28 @@ impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
                     weather_data,
                     probability_of_precipitation_times,
                     &probability_of_precipitation,
+                    prev_forecast_val,
                 )?;
             }
 
             if let Some(wind_direction) = parameter_point.wind_direction {
                 let wind_direction_times = time_layouts.get(&wind_direction.time_layout).unwrap();
-                add_data(weather_data, wind_direction_times, &wind_direction)?;
+                add_data(
+                    weather_data,
+                    wind_direction_times,
+                    &wind_direction,
+                    prev_forecast_val,
+                )?;
             }
 
             if let Some(wind_speed) = parameter_point.wind_speed {
                 let wind_speed_times = time_layouts.get(&wind_speed.time_layout).unwrap();
-                add_data(weather_data, wind_speed_times, &wind_speed)?;
+                add_data(
+                    weather_data,
+                    wind_speed_times,
+                    &wind_speed,
+                    prev_forecast_val,
+                )?;
             }
         }
         Ok(weather)
@@ -400,6 +422,7 @@ fn add_data(
     weather_data: &mut [WeatherForecast],
     time_ranges: &[TimeRange],
     data: &DataReading,
+    prev_weather_data: &mut WeatherForecast,
 ) -> Result<(), Error> {
     for current_data in weather_data.iter_mut() {
         let time_interval_index = get_interval(current_data, time_ranges);
@@ -410,7 +433,11 @@ fn add_data(
                     current_data.liquid_precipitation_amt = data
                         .value
                         .get(index)
-                        .and_then(|value| value.parse::<f64>().ok());
+                        .and_then(|value| value.parse::<f64>().ok())
+                        .map_or(prev_weather_data.liquid_precipitation_amt, |parsed_value| {
+                            prev_weather_data.liquid_precipitation_amt = Some(parsed_value);
+                            Some(parsed_value)
+                        });
                 }
                 current_data.liquid_precipitation_unit_code = data.units.to_string();
             }
@@ -419,7 +446,11 @@ fn add_data(
                     current_data.max_temp = data
                         .value
                         .get(index)
-                        .and_then(|value| value.parse::<i64>().ok());
+                        .and_then(|value| value.parse::<i64>().ok())
+                        .map_or(prev_weather_data.max_temp, |parsed_value| {
+                            prev_weather_data.max_temp = Some(parsed_value);
+                            Some(parsed_value)
+                        });
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
@@ -428,7 +459,11 @@ fn add_data(
                     current_data.min_temp = data
                         .value
                         .get(index)
-                        .and_then(|value: &String| value.parse::<i64>().ok());
+                        .and_then(|value: &String| value.parse::<i64>().ok())
+                        .map_or(prev_weather_data.min_temp, |parsed_value| {
+                            prev_weather_data.min_temp = Some(parsed_value);
+                            Some(parsed_value)
+                        });
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
@@ -437,7 +472,11 @@ fn add_data(
                     current_data.relative_humidity_max = data
                         .value
                         .get(index)
-                        .and_then(|value: &String| value.parse::<i64>().ok());
+                        .and_then(|value: &String| value.parse::<i64>().ok())
+                        .map_or(prev_weather_data.relative_humidity_max, |parsed_value| {
+                            prev_weather_data.relative_humidity_max = Some(parsed_value);
+                            Some(parsed_value)
+                        });
                 }
                 current_data.relative_humidity_unit_code = data.units.to_string();
             }
@@ -446,7 +485,11 @@ fn add_data(
                     current_data.relative_humidity_min = data
                         .value
                         .get(index)
-                        .and_then(|value: &String| value.parse::<i64>().ok());
+                        .and_then(|value: &String| value.parse::<i64>().ok())
+                        .map_or(prev_weather_data.relative_humidity_min, |parsed_value| {
+                            prev_weather_data.relative_humidity_min = Some(parsed_value);
+                            Some(parsed_value)
+                        });
                 }
                 current_data.relative_humidity_unit_code = data.units.to_string();
             }
@@ -455,7 +498,11 @@ fn add_data(
                     current_data.wind_speed = data
                         .value
                         .get(index)
-                        .and_then(|value: &String| value.parse::<i64>().ok());
+                        .and_then(|value: &String| value.parse::<i64>().ok())
+                        .map_or(prev_weather_data.wind_speed, |parsed_value| {
+                            prev_weather_data.wind_speed = Some(parsed_value);
+                            Some(parsed_value)
+                        });
                 }
                 current_data.wind_speed_unit_code = data.units.to_string();
             }
@@ -464,7 +511,15 @@ fn add_data(
                     current_data.twelve_hour_probability_of_precipitation = data
                         .value
                         .get(index)
-                        .and_then(|value: &String| value.parse::<i64>().ok());
+                        .and_then(|value: &String| value.parse::<i64>().ok())
+                        .map_or(
+                            prev_weather_data.twelve_hour_probability_of_precipitation,
+                            |parsed_value| {
+                                prev_weather_data.twelve_hour_probability_of_precipitation =
+                                    Some(parsed_value);
+                                Some(parsed_value)
+                            },
+                        );
                 }
                 current_data.twelve_hour_probability_of_precipitation_unit_code =
                     data.units.to_string();
@@ -474,7 +529,11 @@ fn add_data(
                     current_data.wind_direction = data
                         .value
                         .get(index)
-                        .and_then(|value: &String| value.parse::<i64>().ok());
+                        .and_then(|value: &String| value.parse::<i64>().ok())
+                        .map_or(prev_weather_data.wind_direction, |parsed_value| {
+                            prev_weather_data.wind_direction = Some(parsed_value);
+                            Some(parsed_value)
+                        });
                 }
                 current_data.wind_direction_unit_code = data.units.to_string();
             }
@@ -693,6 +752,7 @@ impl ForecastService {
         Ok(forecasts)
     }
 }
+
 fn get_forecasts_ranges(location: &Location, generated_at: OffsetDateTime) -> Vec<WeatherForecast> {
     let now = OffsetDateTime::now_utc();
     let one_week_from_now = now + Duration::weeks(1);

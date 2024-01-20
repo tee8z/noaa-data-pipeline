@@ -438,6 +438,8 @@ fn add_data(
                             prev_weather_data.liquid_precipitation_amt = Some(parsed_value);
                             Some(parsed_value)
                         });
+                } else {
+                    current_data.liquid_precipitation_amt = prev_weather_data.liquid_precipitation_amt;
                 }
                 current_data.liquid_precipitation_unit_code = data.units.to_string();
             }
@@ -451,6 +453,8 @@ fn add_data(
                             prev_weather_data.max_temp = Some(parsed_value);
                             Some(parsed_value)
                         });
+                } else {
+                    current_data.max_temp = prev_weather_data.max_temp;
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
@@ -464,6 +468,8 @@ fn add_data(
                             prev_weather_data.min_temp = Some(parsed_value);
                             Some(parsed_value)
                         });
+                } else {
+                    current_data.min_temp = prev_weather_data.min_temp;
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
@@ -477,6 +483,8 @@ fn add_data(
                             prev_weather_data.relative_humidity_max = Some(parsed_value);
                             Some(parsed_value)
                         });
+                } else {
+                    current_data.relative_humidity_max = prev_weather_data.relative_humidity_max;
                 }
                 current_data.relative_humidity_unit_code = data.units.to_string();
             }
@@ -490,6 +498,8 @@ fn add_data(
                             prev_weather_data.relative_humidity_min = Some(parsed_value);
                             Some(parsed_value)
                         });
+                } else {
+                    current_data.relative_humidity_min = prev_weather_data.relative_humidity_min;
                 }
                 current_data.relative_humidity_unit_code = data.units.to_string();
             }
@@ -503,6 +513,8 @@ fn add_data(
                             prev_weather_data.wind_speed = Some(parsed_value);
                             Some(parsed_value)
                         });
+                } else {
+                    current_data.wind_speed = prev_weather_data.wind_speed;
                 }
                 current_data.wind_speed_unit_code = data.units.to_string();
             }
@@ -520,6 +532,8 @@ fn add_data(
                                 Some(parsed_value)
                             },
                         );
+                } else {
+                    current_data.twelve_hour_probability_of_precipitation = prev_weather_data.twelve_hour_probability_of_precipitation;
                 }
                 current_data.twelve_hour_probability_of_precipitation_unit_code =
                     data.units.to_string();
@@ -534,6 +548,8 @@ fn add_data(
                             prev_weather_data.wind_direction = Some(parsed_value);
                             Some(parsed_value)
                         });
+                } else {
+                    current_data.wind_direction = prev_weather_data.wind_direction;
                 }
                 current_data.wind_direction_unit_code = data.units.to_string();
             }

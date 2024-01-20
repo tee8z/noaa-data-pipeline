@@ -327,8 +327,7 @@ impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
         let generated_at = get_generated_at(&raw_data);
 
         raw_data.data.location.iter().for_each(|location| {
-            let weather_forecast =
-                get_forecasts_ranges(location, generated_at, time_layouts.clone());
+            let weather_forecast = get_forecasts_ranges(location, generated_at);
             weather.insert(location.location_key.clone(), weather_forecast);
         });
 
@@ -403,110 +402,103 @@ fn add_data(
     data: &DataReading,
 ) -> Result<(), Error> {
     for current_data in weather_data.iter_mut() {
-        let mut time_iter = time_ranges.iter();
-        let mut current_time = time_iter.next().unwrap();
-        let mut time_interval_index: Option<usize> = None;
-
-        // This is an important time comparison, if there are more None's than expected this may be the source
-        while current_time.start_time <= current_data.begin_time {
-            time_interval_index = if let Some(mut interval) = time_interval_index {
-                interval += 1;
-                Some(interval)
-            } else {
-                Some(0)
-            };
-            if let Some(next_time) = time_iter.next() {
-                current_time = next_time
-            } else {
-                break;
-            }
-        }
+        let time_interval_index = get_interval(current_data, time_ranges);
 
         match data.reading_type {
             Liquid => {
                 if let Some(index) = time_interval_index {
-                    if let Some(value) = data.value.get(index) {
-                        if let Ok(parsed) = value.parse::<f64>() {
-                            current_data.liquid_precipitation_amt = Some(parsed);
-                        }
-                    }
+                    current_data.liquid_precipitation_amt = data
+                        .value
+                        .get(index)
+                        .and_then(|value| value.parse::<f64>().ok());
                 }
                 current_data.liquid_precipitation_unit_code = data.units.to_string();
             }
             Maximum => {
                 if let Some(index) = time_interval_index {
-                    if let Some(value) = data.value.get(index) {
-                        if let Ok(parsed) = value.parse::<i64>() {
-                            current_data.max_temp = Some(parsed);
-                        }
-                    }
+                    current_data.max_temp = data
+                        .value
+                        .get(index)
+                        .and_then(|value| value.parse::<i64>().ok());
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
             MaximumRelative => {
                 if let Some(index) = time_interval_index {
-                    if let Some(value) = data.value.get(index) {
-                        if let Ok(parsed) = value.parse::<i64>() {
-                            current_data.relative_humidity_max = Some(parsed);
-                        }
-                    }
+                    current_data.relative_humidity_max = data
+                        .value
+                        .get(index)
+                        .and_then(|value: &String| value.parse::<i64>().ok());
                 }
                 current_data.relative_humidity_unit_code = data.units.to_string();
             }
             Minimum => {
                 if let Some(index) = time_interval_index {
-                    if let Some(value) = data.value.get(index) {
-                        if let Ok(parsed) = value.parse::<i64>() {
-                            current_data.min_temp = Some(parsed);
-                        }
-                    }
+                    current_data.min_temp = data
+                        .value
+                        .get(index)
+                        .and_then(|value: &String| value.parse::<i64>().ok());
                 }
                 current_data.temperature_unit_code = data.units.to_string();
             }
             MinimumRelative => {
                 if let Some(index) = time_interval_index {
-                    if let Some(value) = data.value.get(index) {
-                        if let Ok(parsed) = value.parse::<i64>() {
-                            current_data.relative_humidity_min = Some(parsed);
-                        }
-                    }
+                    current_data.relative_humidity_min = data
+                        .value
+                        .get(index)
+                        .and_then(|value: &String| value.parse::<i64>().ok());
                 }
                 current_data.relative_humidity_unit_code = data.units.to_string();
             }
             Sustained => {
                 if let Some(index) = time_interval_index {
-                    if let Some(value) = data.value.get(index) {
-                        if let Ok(parsed) = value.parse::<i64>() {
-                            current_data.wind_speed = Some(parsed);
-                        }
-                    }
+                    current_data.wind_speed = data
+                        .value
+                        .get(index)
+                        .and_then(|value: &String| value.parse::<i64>().ok());
                 }
                 current_data.wind_speed_unit_code = data.units.to_string();
             }
             ProbabilityOfPrecipitationWithin12Hours => {
                 if let Some(index) = time_interval_index {
-                    if let Some(value) = data.value.get(index) {
-                        if let Ok(parsed) = value.parse::<i64>() {
-                            current_data.twelve_hour_probability_of_precipitation = Some(parsed);
-                        }
-                    }
+                    current_data.twelve_hour_probability_of_precipitation = data
+                        .value
+                        .get(index)
+                        .and_then(|value: &String| value.parse::<i64>().ok());
                 }
                 current_data.twelve_hour_probability_of_precipitation_unit_code =
                     data.units.to_string();
             }
             Wind => {
                 if let Some(index) = time_interval_index {
-                    if let Some(value) = data.value.get(index) {
-                        if let Ok(parsed) = value.parse::<i64>() {
-                            current_data.wind_direction = Some(parsed);
-                        }
-                    }
+                    current_data.wind_direction = data
+                        .value
+                        .get(index)
+                        .and_then(|value: &String| value.parse::<i64>().ok());
                 }
                 current_data.wind_direction_unit_code = data.units.to_string();
             }
         }
     }
     Ok(())
+}
+
+fn get_interval(current_data: &WeatherForecast, time_ranges: &[TimeRange]) -> Option<usize> {
+    let mut time_iter = time_ranges.iter();
+    let mut current_time = time_iter.next().unwrap();
+    let mut time_interval_index: Option<usize> = None;
+
+    // This is an important time comparison, if there are more None's than expected this may be the source
+    while current_time.start_time <= current_data.begin_time {
+        time_interval_index = time_interval_index.map_or(Some(0), |interval| Some(interval + 1));
+
+        if let Some(next_time) = time_iter.next() {
+            current_time = next_time;
+        } else {
+            break;
+        }
+    }
+    time_interval_index
 }
 
 pub struct ForecastRetry {
@@ -692,40 +684,13 @@ impl ForecastService {
         Ok(forecasts)
     }
 }
-fn get_forecasts_ranges(
-    location: &Location,
-    generated_at: OffsetDateTime,
-    time_layouts: HashMap<String, Vec<TimeRange>>,
-) -> Vec<WeatherForecast> {
-    let mut first_start_time_only: Vec<OffsetDateTime> = time_layouts
-        .iter()
-        .filter(|(_, time_ranges)| time_ranges.first().unwrap().end_time.is_none())
-        .map(|(_, time_ranges)| time_ranges.first().unwrap().start_time)
-        .collect();
+fn get_forecasts_ranges(location: &Location, generated_at: OffsetDateTime) -> Vec<WeatherForecast> {
+    let now = OffsetDateTime::now_utc();
+    let one_week_from_now = now + Duration::weeks(1);
 
-    first_start_time_only.sort();
-    let first_time = *first_start_time_only.first().unwrap();
-
-    let mut last_start_time_only: Vec<OffsetDateTime> = time_layouts
-        .iter()
-        .filter(|(_, time_ranges)| time_ranges.first().unwrap().end_time.is_none())
-        .map(|(_, time_ranges)| time_ranges.last().unwrap().start_time)
-        .collect();
-
-    last_start_time_only.sort();
-    let last_time = *last_start_time_only.last().unwrap();
-
-    let time_window = TimeWindow {
-        first_time,
-        last_time,
-        time_interval: Duration::hours(3),
-    };
-    let mut forecasts = Vec::new();
-    let mut current_time = time_window.first_time;
-
-    while current_time <= time_window.last_time {
-        let end_time = current_time + time_window.time_interval;
-
+    let mut current_time = now;
+    let mut forecasts = vec![];
+    while current_time <= one_week_from_now {
         let weather_forecast = WeatherForecast {
             station_id: location.station_id.clone().unwrap_or_default(),
             station_name: String::from(""),
@@ -733,7 +698,7 @@ fn get_forecasts_ranges(
             longitude: location.point.longitude.clone(),
             generated_at,
             begin_time: current_time,
-            end_time,
+            end_time: current_time + Duration::hours(3),
             max_temp: None,
             min_temp: None,
             temperature_unit_code: Units::Fahrenheit.to_string(),
@@ -752,8 +717,7 @@ fn get_forecasts_ranges(
 
         forecasts.push(weather_forecast);
 
-        // Move to the next time interval
-        current_time = end_time;
+        current_time = current_time + Duration::hours(3);
     }
 
     forecasts

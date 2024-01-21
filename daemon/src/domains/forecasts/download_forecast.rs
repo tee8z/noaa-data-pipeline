@@ -678,11 +678,10 @@ impl ForecastService {
         let request_counter = Arc::new(AtomicUsize::new(total_requests));
         let mut set = JoinSet::new();
         for city_weather in split_maps {
-            let tx: mpsc::Sender<Result<HashMap<String, Vec<WeatherForecast>>, Error>> = tx.clone();
             let url = get_url(&city_weather);
             let counter_clone = Arc::clone(&request_counter);
             let forecast_retry =
-                ForecastRetry::new(tx, max_retries, self.fetcher.clone(), self.logger.clone());
+                ForecastRetry::new(tx.clone(), max_retries, self.fetcher.clone(), self.logger.clone());
             let logger_cpy = self.logger.clone();
 
             set.spawn(async move {
@@ -731,6 +730,8 @@ impl ForecastService {
                     progress
                 );
             } else {
+                rx.close();
+                rx.recv().await;
                 info!(self.logger, "all request have completed, moving on");
                 break;
             }

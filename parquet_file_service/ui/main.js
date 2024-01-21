@@ -208,7 +208,7 @@ function displayQueryErr(err) {
     deleteErr();
     const errorDiv = document.createElement("div");
     errorDiv.id = 'error'
-    errorDiv.value = err;
+    errorDiv.textContent = err;
     errorDiv.classList.add("notification");
     errorDiv.classList.add("is-danger");
     errorDiv.classList.add("is-light");

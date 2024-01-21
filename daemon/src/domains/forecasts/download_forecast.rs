@@ -717,6 +717,8 @@ impl ForecastService {
                     error!(self.logger, "Error fetching forecast data: {}", err);
                 }
             }
+            //TODO: there may be an issue here, sometimes we get locked up at this point
+            //https://marabos.nl/atomics/atomics.html
             let batches_left = request_counter.load(Ordering::Relaxed);
             if batches_left > 0 {
                 let progress = ((total_requests as f64 - batches_left as f64)

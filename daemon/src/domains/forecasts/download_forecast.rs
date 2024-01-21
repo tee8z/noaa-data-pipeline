@@ -21,7 +21,7 @@ use std::{collections::HashMap, ops::Add};
 use time::{
     format_description::well_known::Rfc3339, macros::format_description, Duration, OffsetDateTime,
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinSet;
 use tokio::time::sleep;
 /*
@@ -439,7 +439,8 @@ fn add_data(
                             Some(parsed_value)
                         });
                 } else {
-                    current_data.liquid_precipitation_amt = prev_weather_data.liquid_precipitation_amt;
+                    current_data.liquid_precipitation_amt =
+                        prev_weather_data.liquid_precipitation_amt;
                 }
                 current_data.liquid_precipitation_unit_code = data.units.to_string();
             }
@@ -533,7 +534,8 @@ fn add_data(
                             },
                         );
                 } else {
-                    current_data.twelve_hour_probability_of_precipitation = prev_weather_data.twelve_hour_probability_of_precipitation;
+                    current_data.twelve_hour_probability_of_precipitation =
+                        prev_weather_data.twelve_hour_probability_of_precipitation;
                 }
                 current_data.twelve_hour_probability_of_precipitation_unit_code =
                     data.units.to_string();
@@ -680,8 +682,12 @@ impl ForecastService {
         for city_weather in split_maps {
             let url = get_url(&city_weather);
             let counter_clone = Arc::clone(&request_counter);
-            let forecast_retry =
-                ForecastRetry::new(tx.clone(), max_retries, self.fetcher.clone(), self.logger.clone());
+            let forecast_retry = ForecastRetry::new(
+                tx.clone(),
+                max_retries,
+                self.fetcher.clone(),
+                self.logger.clone(),
+            );
             let logger_cpy = self.logger.clone();
 
             set.spawn(async move {
@@ -701,55 +707,56 @@ impl ForecastService {
             });
         }
 
-        let mut forecast_data = HashMap::new();
-        while let Some(result) = rx.recv().await {
-            match result {
-                Ok(data) => {
+        let forecast_data = Arc::new(Mutex::new(HashMap::new()));
+        let forecast_data_clone = Arc::clone(&forecast_data);
+        let logger_clone = self.logger.clone();
+        set.spawn(async move {
+            while let Some(result) = rx.recv().await {
+                match result {
+                    Ok(data) => {
+                        info!(
+                            &logger_clone,
+                            "found more forecast data for: {:?}",
+                            data.keys()
+                        );
+                        let mut forecast_data = forecast_data_clone.lock().await;
+                        forecast_data.extend(data);
+                    }
+                    Err(err) => {
+                        error!(&logger_clone, "Error fetching forecast data: {}", err);
+                    }
+                }
+
+                let batches_left = request_counter.load(Ordering::Relaxed);
+                if batches_left > 0 {
+                    let progress = ((total_requests as f64 - batches_left as f64)
+                        / total_requests as f64)
+                        * 100 as f64;
                     info!(
-                        self.logger,
-                        "found more forecast data for: {:?}",
-                        data.keys()
+                        &logger_clone,
+                        "waiting for next batch of weather data, batches left: {} progress: {:.2}%",
+                        batches_left,
+                        progress
                     );
-                    forecast_data.extend(data);
-                }
-                Err(err) => {
-                    error!(self.logger, "Error fetching forecast data: {}", err);
+                } else {
+                    rx.close();
+                    rx.recv().await;
+                    info!(&logger_clone, "all request have completed, moving on");
+                    break;
                 }
             }
+        });
 
-            let batches_left = request_counter.load(Ordering::Relaxed);
-            if batches_left > 0 {
-                let progress = ((total_requests as f64 - batches_left as f64)
-                    / total_requests as f64)
-                    * 100 as f64;
-                info!(
-                    self.logger,
-                    "waiting for next batch of weather data, batches left: {} progress: {:.2}%",
-                    batches_left,
-                    progress
-                );
-            } else {
-                rx.close();
-                rx.recv().await;
-                info!(self.logger, "all request have completed, moving on");
-                break;
-            }
-        }
-
-        while let Some(res) = set.join_next().await {
-            match res {
-                Ok(_) => {
-                    info!(self.logger, "task finished")
-                }
-                Err(e) => {
-                    error!(self.logger, "error with task: {}", e)
-                }
+        while let Some(inner_res) = set.join_next().await {
+            match inner_res {
+                Ok(_) => info!(self.logger, "task finished"),
+                Err(e) => error!(self.logger, "error with task: {}", e),
             }
         }
 
         info!(self.logger, "done waiting for data, contining");
         let mut forecasts = vec![];
-        for all_forecasts in forecast_data.values() {
+        for all_forecasts in forecast_data.lock().await.values() {
             for weather_forecats in all_forecasts {
                 let current = weather_forecats.clone();
                 debug!(

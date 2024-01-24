@@ -731,7 +731,7 @@ impl ForecastService {
                 if batches_left > 0 {
                     let progress = ((total_requests as f64 - batches_left as f64)
                         / total_requests as f64)
-                        * 100 as f64;
+                        * 100_f64;
                     info!(
                         &logger_clone,
                         "waiting for next batch of weather data, batches left: {} progress: {:.2}%",
@@ -811,7 +811,7 @@ fn get_forecasts_ranges(location: &Location, generated_at: OffsetDateTime) -> Ve
 
         forecasts.push(weather_forecast);
 
-        current_time = current_time + Duration::hours(3);
+        current_time += Duration::hours(3);
     }
 
     forecasts

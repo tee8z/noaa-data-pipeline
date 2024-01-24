@@ -62,7 +62,7 @@ fn current_folder(logger: &Logger, root_path: &str) -> String {
     let current_date = OffsetDateTime::now_utc().date();
     let subfolder = format!("{}/{}", root_path, current_date);
     if !subfolder_exists(&subfolder) {
-        create_folder(&logger, &subfolder)
+        create_folder(logger, &subfolder)
     }
     subfolder
 }

@@ -76,7 +76,7 @@ pub async fn send_parquet_files(
     let url_forcast = format!("{}/file/{}", base_url, forecast_filename);
 
     match send_file_to_endpoint(
-        &logger,
+        logger,
         &observation_full_path,
         observation_filename,
         &url_observ,
@@ -89,7 +89,7 @@ pub async fn send_parquet_files(
         }
     }
     match send_file_to_endpoint(
-        &logger,
+        logger,
         &forecast_full_path,
         forecast_filename,
         &url_forcast,

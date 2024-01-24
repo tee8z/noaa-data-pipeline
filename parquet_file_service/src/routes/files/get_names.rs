@@ -9,7 +9,9 @@ use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use slog::{error, trace, Logger};
 use std::sync::Arc;
-use time::{format_description::well_known::Rfc3339, Date, macros::format_description, OffsetDateTime, Time};
+use time::{
+    format_description::well_known::Rfc3339, macros::format_description, Date, OffsetDateTime,
+};
 use tokio::fs;
 
 // Make our own error that wraps `anyhow::Error`.
@@ -134,25 +136,19 @@ fn add_filename(
         trace!(logger, "parsed file type:{}", file_data_type);
 
         if let Some(observations) = params.observations {
-            if observations && file_data_type.eq("observations") {
-                if valid_time_range {
-                    return Ok(Some(filename.to_owned()));
-                }
+            if observations && file_data_type.eq("observations") && valid_time_range {
+                return Ok(Some(filename.to_owned()));
             }
         }
 
         if let Some(forecasts) = params.forecasts {
-            if forecasts && file_data_type.eq("forecasts") {
-                if valid_time_range {
-                    return Ok(Some(filename.to_owned()));
-                }
+            if forecasts && file_data_type.eq("forecasts") && valid_time_range {
+                return Ok(Some(filename.to_owned()));
             }
         }
 
-        if params.forecasts.is_none() && params.observations.is_none() {
-            if valid_time_range {
-                return Ok(Some(filename.to_owned()));
-            }
+        if params.forecasts.is_none() && params.observations.is_none() && valid_time_range {
+            return Ok(Some(filename.to_owned()));
         }
     }
     Ok(None)
@@ -180,7 +176,7 @@ fn is_date_in_range(compare_to: Date, params: &FileParams) -> bool {
             Err(_) => false,
         };
     }
-    return true;
+    true
 }
 
 fn is_time_in_range(compare_to: OffsetDateTime, params: &FileParams) -> bool {
@@ -197,5 +193,5 @@ fn is_time_in_range(compare_to: OffsetDateTime, params: &FileParams) -> bool {
             Err(_) => false,
         };
     }
-    return true;
+    true
 }

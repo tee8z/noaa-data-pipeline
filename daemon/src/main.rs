@@ -1,7 +1,7 @@
 use daemon::{
     create_folder, get_config_info, get_coordinates, save_forecasts, save_observations,
-    send_parquet_files, setup_logger, Cli, ForecastService, ObservationService, RateLimiter,
-    XmlFetcher,
+    send_parquet_files, setup_logger, subfolder_exists, Cli, ForecastService, ObservationService,
+    RateLimiter, XmlFetcher,
 };
 use slog::{debug, error, info, Logger};
 use std::{sync::Arc, time::Duration};
@@ -81,16 +81,20 @@ async fn process_data(
     debug!(logger_cpy, "observations: {:?}", observations);
     let current_utc_time: String = OffsetDateTime::now_utc().format(&Rfc3339)?;
     let root_path = cli.data_dir.clone().unwrap_or(String::from("./data"));
-
     create_folder(&root_path, logger_cpy);
+    let current_date = OffsetDateTime::now_utc().date();
+    let subfolder = format!("{}/{}", root_path, current_date);
+    if !subfolder_exists(&subfolder) {
+        create_folder(&subfolder, logger_cpy)
+    }
     let forecast_parquet = save_forecasts(
         forecasts,
-        &root_path,
+        &subfolder,
         format!("{}_{}", "forecasts", current_utc_time),
     );
     let observation_parquet = save_observations(
         observations,
-        &root_path,
+        &subfolder,
         format!("{}_{}", "observations", current_utc_time),
     );
     send_parquet_files(&cli, logger_cpy, observation_parquet, forecast_parquet).await?;

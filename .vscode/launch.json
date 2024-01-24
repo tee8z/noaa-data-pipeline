@@ -76,7 +76,7 @@
                 }
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}/parquet_file_service"
         },
         {
             "type": "lldb",

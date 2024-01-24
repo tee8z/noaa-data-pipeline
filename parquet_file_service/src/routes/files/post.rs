@@ -4,10 +4,11 @@ use axum::{
     extract::{Multipart, Path, State},
     http::StatusCode,
 };
-use slog::{error, info};
+use slog::{error, info, Logger};
+use time::OffsetDateTime;
 use tokio::{fs::File, io::AsyncWriteExt};
 
-use crate::AppState;
+use crate::{create_folder, subfolder_exists, AppState};
 
 pub async fn upload(
     State(state): State<Arc<AppState>>,
@@ -32,7 +33,8 @@ pub async fn upload(
             file_name,
             bytes_to_mb(data.len())
         );
-        let path = std::path::Path::new(&state.data_dir).join(&file_name);
+        let current_folder = current_folder(&state.logger, &state.data_dir);
+        let path = std::path::Path::new(&current_folder).join(&file_name);
         // Create a new file and write the data to it
         let mut file = File::create(&path).await.map_err(|err| {
             error!(state.logger, "error creating file: {}", err);
@@ -54,6 +56,15 @@ pub async fn upload(
 
 fn bytes_to_mb(bytes: usize) -> f64 {
     bytes as f64 / 1_048_576.0
+}
+
+fn current_folder(logger: &Logger, root_path: &str) -> String {
+    let current_date = OffsetDateTime::now_utc().date();
+    let subfolder = format!("{}/{}", root_path, current_date);
+    if !subfolder_exists(&subfolder) {
+        create_folder(&logger, &subfolder)
+    }
+    subfolder
 }
 
 // to prevent directory traversal attacks we ensure the path consists of exactly one normal component

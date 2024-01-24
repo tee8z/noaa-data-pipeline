@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{
     body::StreamBody,
     extract::{Path, State},
@@ -10,17 +8,40 @@ use hyper::{
     Body, HeaderMap,
 };
 use slog::error;
+use std::sync::Arc;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
-use crate::AppState;
+use crate::{drop_suffix, AppState};
 
 pub async fn download(
     State(state): State<Arc<AppState>>,
     Path(filename): Path<String>,
     _request: Request<Body>,
 ) -> Result<(HeaderMap, StreamBody<ReaderStream<File>>), (StatusCode, String)> {
-    let file_path = format!("{}/{}", state.data_dir, filename);
+    let file_pieces: Vec<String> = filename.split('_').map(|f| f.to_owned()).collect();
+    let created_time = drop_suffix(file_pieces.last().unwrap(), ".parquet");
+    let file_generated_at = OffsetDateTime::parse(&created_time, &Rfc3339).map_err(|e| {
+        error!(
+            state.logger,
+            "error stored filename does not have a valid rfc3339 datetime in name: {}", e
+        );
+        (
+            StatusCode::BAD_REQUEST,
+            format!(
+                "Badly formatted filename, not a valid rfc3339 datetime: {}",
+                e
+            ),
+        )
+    })?;
+    // split filename for the date, add that to the path
+    let file_path = format!(
+        "{}/{}/{}",
+        state.data_dir,
+        file_generated_at.date(),
+        filename
+    );
 
     let file = File::open(file_path).await.map_err(|err| {
         error!(state.logger, "error opening file: {}", err);

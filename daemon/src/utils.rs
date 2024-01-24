@@ -244,3 +244,7 @@ pub fn create_folder(root_path: &str, logger: &Logger) {
         info!(logger, "folder already exists: {}", root_path);
     }
 }
+
+pub fn subfolder_exists(subfolder_path: &str) -> bool {
+    fs::metadata(subfolder_path).is_ok()
+}

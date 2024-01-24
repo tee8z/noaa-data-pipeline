@@ -23,6 +23,10 @@ pub fn create_folder(logger: &Logger, root_path: &str) {
     }
 }
 
+pub fn subfolder_exists(subfolder_path: &str) -> bool {
+    fs::metadata(subfolder_path).is_ok()
+}
+
 #[derive(Parser, Clone, Debug, serde::Deserialize)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {

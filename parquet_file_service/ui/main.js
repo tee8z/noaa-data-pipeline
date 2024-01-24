@@ -117,8 +117,8 @@ async function loadFiles(fileNames) {
     }
 
     if (Array.isArray(forecast_files) && forecast_files.length > 0) {
-        let files = 
-        await conn.query(`
+        let files =
+            await conn.query(`
     CREATE TABLE forecasts AS SELECT * FROM read_parquet(['${forecast_files.join('\', \'')}'], union_by_name = true);
     `);
         const forecasts = await conn.query(`SELECT * FROM forecasts LIMIT 1;`);
@@ -183,6 +183,9 @@ function loadTable(tableName, queryResult) {
             console.log(column);
             let values = column.values;
             const array_type = getArrayType(values);
+            if (array_type == 'BigInt64Array') {
+                values = formatInts(values);
+            }
             if (array_type == 'Uint8Array') {
                 const offSets = column.valueOffsets;
                 values = convertUintArrayToStrings(values, offSets);
@@ -269,6 +272,20 @@ function convertUintArrayToStrings(uint8Array, valueOffsets) {
 
     console.log(decodedStrings);
     return decodedStrings
+}
+
+function formatInts(intArray) {
+    const maxSafeInteger = BigInt(Number.MAX_SAFE_INTEGER);
+    let formattedVals = [];
+    for (let i = 0; i < intArray.length; i++) {
+        if (intArray[i] > maxSafeInteger || intArray[i] < -maxSafeInteger) {
+            formattedVals[i] = "NaN";
+        } else {
+            formattedVals[i] = `${intArray[i]}`
+        }
+    }
+
+    return formattedVals
 }
 
 function clearQuerys(event) {

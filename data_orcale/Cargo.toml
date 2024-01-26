@@ -28,6 +28,7 @@ clap = { version = "4.3.23", features = ["derive", "env"] }
 toml = "0.5.10"
 rustix = "0.38.19"
 h2 = "0.3.24"
+kormir = { version = "0.1.7", features = ["nostr"] }
 
 [dev-dependencies]
 tower = "0.4.13"

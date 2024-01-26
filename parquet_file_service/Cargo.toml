@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 axum = { version = "0.6.19", features = ["macros", "tracing", "multipart"] }
-tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread"] }
-tokio-util = "0.7.9"
+tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread"] }
+tokio-util = "0.7.10"
 hyper = "0.14.27"
 time = { version = "0.3.25", features = ["parsing", "formatting"] }
 uuid = { version = "1.4.1", features = ["v4"] }

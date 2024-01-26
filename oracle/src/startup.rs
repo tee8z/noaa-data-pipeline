@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{download, files, health_check, index_handler, upload, DbManager, OracleService};
+use crate::{create_enum_event, download, files, get_event, get_events, get_pubkey, health_check, index_handler, sign_event, upload, OracleService};
 use axum::{
     extract::DefaultBodyLimit,
     routing::{get, post},
@@ -22,7 +22,13 @@ pub struct AppState {
     pub oracle_service: OracleService,
 }
 
-pub fn app(logger: Logger, remote_url: String, ui_dir: String, data_dir: String, oracle_service: OracleService) -> Router {
+pub fn app(
+    logger: Logger,
+    remote_url: String,
+    ui_dir: String,
+    data_dir: String,
+    oracle_service: OracleService,
+) -> Router {
     let cors = CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])
@@ -36,13 +42,25 @@ pub fn app(logger: Logger, remote_url: String, ui_dir: String, data_dir: String,
         data_dir,
         ui_dir,
         remote_url,
-        oracle_service
+        oracle_service,
     };
+
+    let raw_data_routes = Router::new()
+        .route("/", get(files))
+        .route("/:file_name", get(download))
+        .route("/:file_name", post(upload)); //NOTE: make this a private route with a proxy (like nginx) so only the daemon can upload to it
+
+    let oracle_routes = Router::new()
+        .route("/", get(get_pubkey))
+        .route("/events", get(get_events))
+        .route("/events/:event_id", get(get_event))
+        .route("/enum", post(create_enum_event))
+        .route("/sign", post(sign_event));
+
     Router::new()
         .route("/health_check", get(health_check))
-        .route("/files", get(files))
-        .route("/file/:file_name", get(download))
-        .route("/file/:file_name", post(upload))
+        .nest("/files", raw_data_routes)
+        .nest("/oracle", oracle_routes)
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // max is in bytes
         .route("/", get(index_handler))
         .with_state(Arc::new(app_state))

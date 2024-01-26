@@ -17,7 +17,7 @@ mime = "0.3.17"
 tower-http = { version= "0.4.4", features = ["fs", "cors"] }
 futures = "0.3.28"
 serde = { version="1.0.188", features= ["derive"]}
-openssl = { version = "0.10", features = ["vendored"] }
+openssl = { version = "0.10.60", features = ["vendored"] }
 num_cpus = "1.16.0"
 config = "0.13.1"
 log = "0.4.18"
@@ -26,6 +26,8 @@ slog-term = "2.9.0"
 slog-async = "2.7.0"
 clap = { version = "4.3.23", features = ["derive", "env"] }
 toml = "0.5.10"
+rustix = "0.38.19"
+h2 = "0.3.24"
 
 [dev-dependencies]
 tower = "0.4.13"

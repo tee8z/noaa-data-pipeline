@@ -857,8 +857,13 @@ fn get_url(city_weather: &CityWeather) -> String {
 
     // Round to the nearest hour
     if current_time.minute() > 30 {
+        let hour = if current_time.hour() == 23 {
+            0
+        } else {
+            current_time.hour() + 1
+        };
         current_time = current_time
-            .replace_hour(current_time.hour() + 1)
+            .replace_hour(hour)
             .unwrap()
             .replace_minute(0)
             .unwrap()

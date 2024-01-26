@@ -1,31 +1,6 @@
-use std::{
-    env,
-    fs::{self, File},
-    io::Read,
-    path::Path,
-};
-
 use clap::{command, Parser};
-use slog::{error, info, o, Drain, Level, Logger};
-
-pub fn create_folder(logger: &Logger, root_path: &str) {
-    let path = Path::new(root_path);
-
-    if !path.exists() || !path.is_dir() {
-        // Create the folder if it doesn't exist
-        if let Err(err) = fs::create_dir(path) {
-            error!(logger, "error creating folder: {}", err);
-        } else {
-            info!(logger, "folder created: {}", root_path);
-        }
-    } else {
-        info!(logger, "folder already exists: {}", root_path);
-    }
-}
-
-pub fn subfolder_exists(subfolder_path: &str) -> bool {
-    fs::metadata(subfolder_path).is_ok()
-}
+use slog::{o, Drain, Level, Logger};
+use std::{env, fs::File, io::Read};
 
 #[derive(Parser, Clone, Debug, serde::Deserialize)]
 #[command(author, version, about, long_about = None)]
@@ -57,6 +32,15 @@ pub struct Cli {
     /// Path to files used to make the browser UI (default: ./ui)
     #[arg(short, long)]
     pub ui_dir: Option<String>,
+
+    /// Path to oracle signing key (THIS IS HIGHLY SENSITIVE, DO NOT LEAK)
+    pub private_key_file: String,
+
+    /// Nostr relays used to broadcast and coordinate a dlc
+    pub nostr_relays: Option<Vec<String>>,
+
+    /// Db file path
+    pub db_file: Option<String>,
 }
 
 pub fn get_config_info() -> Cli {

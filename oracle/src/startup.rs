@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{download, files, index_handler, upload};
+use crate::{download, files, health_check, index_handler, upload, DbManager, OracleService};
 use axum::{
     extract::DefaultBodyLimit,
     routing::{get, post},
@@ -19,13 +19,14 @@ pub struct AppState {
     pub data_dir: String,
     pub ui_dir: String,
     pub remote_url: String,
+    pub oracle_service: OracleService,
 }
 
-pub fn app(logger: Logger, remote_url: String, ui_dir: String, data_dir: String) -> Router {
+pub fn app(logger: Logger, remote_url: String, ui_dir: String, data_dir: String, oracle_service: OracleService) -> Router {
     let cors = CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])
-        // allow requests from any origin
+        // TODO (@tee8z): add limits to what browser pages can hit this service via config value
         .allow_origin(Any);
 
     // The ui folder needs to be generated and have this relative path from where the binary is being run
@@ -35,8 +36,10 @@ pub fn app(logger: Logger, remote_url: String, ui_dir: String, data_dir: String)
         data_dir,
         ui_dir,
         remote_url,
+        oracle_service
     };
     Router::new()
+        .route("/health_check", get(health_check))
         .route("/files", get(files))
         .route("/file/:file_name", get(download))
         .route("/file/:file_name", post(upload))

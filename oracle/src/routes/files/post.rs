@@ -8,7 +8,7 @@ use slog::{error, info, Logger};
 use time::OffsetDateTime;
 use tokio::{fs::File, io::AsyncWriteExt};
 
-use crate::{create_folder, subfolder_exists, AppState};
+use crate::{create_folder, path_exists, AppState};
 
 pub async fn upload(
     State(state): State<Arc<AppState>>,
@@ -61,7 +61,7 @@ fn bytes_to_mb(bytes: usize) -> f64 {
 fn current_folder(logger: &Logger, root_path: &str) -> String {
     let current_date = OffsetDateTime::now_utc().date();
     let subfolder = format!("{}/{}", root_path, current_date);
-    if !subfolder_exists(&subfolder) {
+    if !path_exists(&subfolder) {
         create_folder(logger, &subfolder)
     }
     subfolder

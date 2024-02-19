@@ -1,4 +1,4 @@
-level = "debug"
+level = "info"
 base_url = "http://localhost:9100"
 data_dir = "./data"
 sleep_interval = 3600

@@ -322,13 +322,12 @@ impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
             time_layouts.insert(time_range.first().unwrap().key.clone(), time_range);
         }
 
-        // The `location_key` is the key for each hashmap entry
+        // The `location-key` is the key for each hashmap entry
         let mut weather: HashMap<String, Vec<WeatherForecast>> = HashMap::new();
         let generated_at = get_generated_at(&raw_data);
 
         raw_data.data.location.iter().for_each(|location| {
             let weather_forecast = get_forecasts_ranges(location, generated_at);
-            //need to use station_id
             weather.insert(location.location_key.clone(), weather_forecast);
         });
         // Used to pull the data forward from last time we had a forecast for a value
@@ -731,7 +730,7 @@ impl ForecastService {
                             data.keys()
                         );
                         let mut forecast_data = forecast_data_clone.lock().await;
-                        //change key to station_id
+                        //using station_id as the key
                         forecast_data.extend(data);
                     }
                     Err(err) => {

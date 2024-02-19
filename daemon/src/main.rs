@@ -72,14 +72,12 @@ async fn process_data(
         .get_forecasts(&city_weather_coordinates)
         .await?;
     debug!(logger_cpy, "forcasts count {}", forecasts.len());
-    debug!(logger_cpy, "forecasts: {:?}", forecasts);
-
     let observation_service = ObservationService::new(logger, fetcher);
     let observations = observation_service
         .get_observations(&city_weather_coordinates)
         .await?;
 
-    debug!(logger_cpy, "observations: {:?}", observations);
+    debug!(logger_cpy, "observations count: {:?}", observations.len());
     let current_utc_time: String = OffsetDateTime::now_utc().format(&Rfc3339)?;
     let root_path = cli.data_dir.clone().unwrap_or(String::from("./data"));
     create_folder(&root_path, logger_cpy);
@@ -88,7 +86,6 @@ async fn process_data(
     if !subfolder_exists(&subfolder) {
         create_folder(&subfolder, logger_cpy)
     }
-    debug!(logger_cpy, "forcasts count {}", forecasts.len());
     let forecast_parquet = save_forecasts(
         forecasts,
         &subfolder,

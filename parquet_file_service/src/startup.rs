@@ -40,7 +40,7 @@ pub fn app(logger: Logger, remote_url: String, ui_dir: String, data_dir: String)
         .route("/files", get(files))
         .route("/file/:file_name", get(download))
         .route("/file/:file_name", post(upload))
-        .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // max is in bytes
+        .layer(DefaultBodyLimit::max(30 * 1024 * 1024)) // max is in bytes
         .route("/", get(index_handler))
         .with_state(Arc::new(app_state))
         .nest_service("/ui", serve_dir.clone())

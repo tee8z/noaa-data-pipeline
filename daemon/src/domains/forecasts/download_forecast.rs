@@ -399,7 +399,17 @@ impl TryFrom<Dwml> for HashMap<String, Vec<WeatherForecast>> {
                 )?;
             }
         }
-        Ok(weather)
+        // The `station_id` is the key for each hashmap entry, if location doesn't have station_id, we skip
+        let mut weather_by_station: HashMap<String, Vec<WeatherForecast>> = HashMap::new();
+        raw_data.data.location.iter().for_each(|location| {
+            if let Some(weather_forecast) = weather.get(&location.location_key) {
+                if let Some(station_id) = &location.station_id {
+                    weather_by_station.insert(station_id.clone(), weather_forecast.clone());
+                }
+            }
+        });
+
+        Ok(weather_by_station)
     }
 }
 
@@ -720,6 +730,7 @@ impl ForecastService {
                             data.keys()
                         );
                         let mut forecast_data = forecast_data_clone.lock().await;
+                        //using station_id as the key
                         forecast_data.extend(data);
                     }
                     Err(err) => {

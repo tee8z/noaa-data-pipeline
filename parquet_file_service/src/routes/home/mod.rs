@@ -1,3 +1,3 @@
-mod get;
+mod index;
 
-pub use get::*;
+pub use index::*;

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{download, files, index_handler, upload};
+use crate::{download, files, forecasts, get_stations, index_handler, observations, upload};
 use axum::{
     extract::DefaultBodyLimit,
     routing::{get, post},
@@ -40,6 +40,9 @@ pub fn app(logger: Logger, remote_url: String, ui_dir: String, data_dir: String)
         .route("/files", get(files))
         .route("/file/:file_name", get(download))
         .route("/file/:file_name", post(upload))
+        .route("/stations", get(get_stations))
+        .route("/stations/forecasts", get(forecasts))
+        .route("/stations/observations", get(observations))
         .layer(DefaultBodyLimit::max(30 * 1024 * 1024)) // max is in bytes
         .route("/", get(index_handler))
         .with_state(Arc::new(app_state))

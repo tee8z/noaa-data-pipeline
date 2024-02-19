@@ -71,6 +71,7 @@ async fn process_data(
     let forecasts = forecast_service
         .get_forecasts(&city_weather_coordinates)
         .await?;
+    debug!(logger_cpy, "forcasts count {}", forecasts.len());
     debug!(logger_cpy, "forecasts: {:?}", forecasts);
 
     let observation_service = ObservationService::new(logger, fetcher);
@@ -87,6 +88,7 @@ async fn process_data(
     if !subfolder_exists(&subfolder) {
         create_folder(&subfolder, logger_cpy)
     }
+    debug!(logger_cpy, "forcasts count {}", forecasts.len());
     let forecast_parquet = save_forecasts(
         forecasts,
         &subfolder,

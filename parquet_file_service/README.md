@@ -79,6 +79,16 @@ curl -H "Content-Type: multipart/form-data" -F "file=@/home/tee8z/repos/noaa-dat
 * Connection #0 to host localhost left intact
 ```
 
+### Get small subset of observation data
+curl -v "http://localhost:9100/stations/observations?start=2024-02-15T00:00:00.00Z&end=2024-02-25T00:00:00.00Z&station_ids=KLWV,KLBB,KTOA"
+
+### Get small subset of forecast data
+curl -v "http://localhost:9100/stations/forecasts?start=2024-02-15T00:00:00.00Z&end=2024-02-25T00:00:00.00Z&station_ids=KLWV,KLBB,KTOA"
+
+### Get stations stored in observation data
+curl -v "http://localhost:9100/stations
+
+
 ### The service expects the following folders in the working directory path (where the binary is running)
 - `./ui`
 - `./weather_data`

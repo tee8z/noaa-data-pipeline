@@ -1,7 +1,7 @@
-mod get;
+mod download;
 mod get_names;
-mod post;
+mod upload;
 
-pub use get::*;
+pub use download::*;
 pub use get_names::*;
-pub use post::*;
+pub use upload::*;

@@ -88,13 +88,7 @@ pub async fn send_parquet_files(
             error!(logger, "failed to upload observations: {}", e)
         }
     }
-    match send_file_to_endpoint(
-        logger,
-        &forecast_full_path,
-        forecast_filename,
-        &url_forcast,
-    )
-    .await
+    match send_file_to_endpoint(logger, &forecast_full_path, forecast_filename, &url_forcast).await
     {
         Ok(_) => {}
         Err(e) => {

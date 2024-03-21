@@ -129,7 +129,7 @@ fn run_forecasts_query(
 
     if let Some(end) = &req.end {
         daily_forecasts = daily_forecasts.where_(format!(
-            "(DATE_TRUNC('day', begin_time::TIMESTAMP) + INTERVAL '1 day')::TIMESTAMPTZ <= {}::TIMESTAMPTZ",
+            "(DATE_TRUNC('day', end_time::TIMESTAMP)::TIMESTAMPTZ <= {}::TIMESTAMPTZ",
             placeholders.next()
         ));
         values.push(end.to_owned());

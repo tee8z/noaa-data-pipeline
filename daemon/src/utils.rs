@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Error};
+use async_compression::tokio::bufread::GzipDecoder;
 use clap::Parser;
-use futures::StreamExt;
+use futures::TryStreamExt;
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
@@ -8,13 +9,15 @@ use slog::{debug, error, info, o, Drain, Level, Logger};
 use std::{
     env,
     fs::{self, File},
-    io::{Read, Write},
+    io::Read,
     path::Path,
     sync::Arc,
     thread,
     time::{Duration, Instant},
 };
+use tokio::io::AsyncBufReadExt;
 use tokio::sync::Mutex;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 #[derive(Parser, Clone, Debug, serde::Deserialize)]
 #[command(author, version, about, long_about = None)]
@@ -177,6 +180,7 @@ impl XmlFetcher {
         debug!(self.logger, "requesting: {}", url);
         let response = client
             .get(url)
+            .timeout(Duration::from_secs(20))
             .send()
             .await
             .map_err(|e| anyhow!("error sending request: {}", e))?;
@@ -185,10 +189,11 @@ impl XmlFetcher {
             Err(e) => Err(anyhow!("error parsing body of request: {}", e)),
         }
     }
-    pub async fn fetch_xml_zip(&self, url: &str) -> Result<File, Error> {
+
+    pub async fn fetch_xml_gzip(&self, url: &str) -> Result<String, Error> {
         let mut limiter = self.rate_limiter.lock().await;
         if !limiter.try_acquire(1.0) {
-            // This happens after waitin and trying 3 times
+            // This happens after waiting and trying 3 times
             return Err(anyhow!("Rate limit exceeded after retries"));
         }
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
@@ -199,6 +204,7 @@ impl XmlFetcher {
         debug!(self.logger, "requesting: {}", url);
         let response = client
             .get(url)
+            .timeout(Duration::from_secs(1))
             .send()
             .await
             .map_err(|e| anyhow!("error sending request: {}", e))?;
@@ -206,16 +212,22 @@ impl XmlFetcher {
             return Err(anyhow!("error response from request"));
         }
 
-        let mut temp_file = tempfile::tempfile().unwrap();
-        let mut body = response.bytes_stream();
-        while let Some(chunk) = body.next().await {
-            let chunk = chunk?;
-            temp_file.write_all(&chunk)?;
+        let stream = response
+            .bytes_stream()
+            .map_err(|e| futures::io::Error::new(futures::io::ErrorKind::Other, e))
+            .into_async_read()
+            .compat();
+        let gzip_decoder = GzipDecoder::new(stream);
+
+        let buf_reader = tokio::io::BufReader::new(gzip_decoder);
+        let mut content = String::new();
+        let mut lines = buf_reader.lines();
+        while let Some(line) = lines.next_line().await? {
+            content.push_str(line.as_str());
+            content.push('\n');
         }
 
-        temp_file.sync_all()?;
-
-        Ok(temp_file)
+        Ok(content)
     }
 }
 

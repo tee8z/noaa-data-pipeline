@@ -1,3 +1,17 @@
+### Get duckdb library for compling
+```
+When linking against a DuckDB library already on the system (so not using any of the bundled features), you can set the DUCKDB_LIB_DIR environment variable to point to a directory containing the library. You can also set the DUCKDB_INCLUDE_DIR variable to point to the directory containing duckdb.h.
+```
+```
+wget https://github.com/duckdb/duckdb/releases/download/v1.0.0/libduckdb-linux-amd64.zip
+mkdir duckdb_lib
+unzip libduckdb-linux-amd64.zip -d duckdb_lib
+```
+* Then set the DUCKDB_LIB_DIR var to (or whatever the full path to the folder holding the library is at)
+```
+DUCKDB_LIB_DIR="/home/<user>/duckdb_lib"
+```
+
 ### Get list of files (optional params for filtering)
 ##### Request:
 ```

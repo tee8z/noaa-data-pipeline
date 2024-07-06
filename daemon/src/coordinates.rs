@@ -29,7 +29,7 @@ impl From<Station> for WeatherStation {
     fn from(value: Station) -> Self {
         WeatherStation {
             station_id: value.station_id,
-            station_name: value.station_name,
+            station_name: value.site,
             latitude: value.latitude,
             longitude: value.longitude,
         }
@@ -132,14 +132,25 @@ static STATE_ABBERVIATIONS: &[&str] = &[
 
 pub async fn get_coordinates(fetcher: Arc<XmlFetcher>) -> Result<CityWeather, Error> {
     let mut city_data: HashMap<String, WeatherStation> = HashMap::new();
+    // Broken @ NOAA: https://forecast.weather.gov/xml/current_obs/index.xml
+
     let raw_xml = fetcher
-        .fetch_xml("https://w1.weather.gov/xml/current_obs/index.xml")
+        .fetch_xml_gzip("https://aviationweather.gov/data/cache/stations.cache.xml.gz")
         .await?;
     let converted_xml: WxStationIndex = serde_xml_rs::from_str(&raw_xml)?;
 
-    for station in converted_xml.station {
+    for station in converted_xml.data.station {
         // Skip any place not in the US
-        if !STATE_ABBERVIATIONS.contains(&station.state.as_str()) {
+        if let Some(country) = &station.country {
+            if country != "US" {
+                continue;
+            }
+        }
+        if let Some(state) = &station.state {
+            if !STATE_ABBERVIATIONS.contains(&state.as_str()) {
+                continue;
+            }
+        } else {
             continue;
         }
         let weather_station: WeatherStation = station.clone().into();
@@ -150,48 +161,40 @@ pub async fn get_coordinates(fetcher: Arc<XmlFetcher>) -> Result<CityWeather, Er
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename = "response")]
 pub struct WxStationIndex {
-    #[serde(rename = "credit")]
-    credit: String,
+    #[serde(rename = "request_index")]
+    request_index: String,
 
-    #[serde(rename = "credit_URL")]
-    credit_url: String,
+    #[serde(rename = "data_source")]
+    data_source: DataSource,
 
-    #[serde(rename = "image")]
-    image: StationImage,
+    #[serde(rename = "request")]
+    request: Request,
 
-    #[serde(rename = "suggested_pickup")]
-    suggested_pickup: String,
+    #[serde(rename = "errors")]
+    errors: String,
 
-    #[serde(rename = "suggested_pickup_period")]
-    suggested_pickup_period: String,
+    #[serde(rename = "warnings")]
+    warnings: String,
 
-    #[serde(rename = "station")]
-    station: Vec<Station>,
+    #[serde(rename = "data")]
+    data: StationData,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct StationImage {
-    #[serde(rename = "url")]
-    url: String,
+pub struct StationData {
+    #[serde(rename = "Station")]
+    station: Vec<Station>,
 
-    #[serde(rename = "title")]
-    title: String,
-
-    #[serde(rename = "link")]
-    link: String,
+    #[serde(rename = "num_results")]
+    num_results: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Station {
     #[serde(rename = "station_id")]
     station_id: String,
-
-    #[serde(rename = "state")]
-    state: String,
-
-    #[serde(rename = "station_name")]
-    station_name: String,
 
     #[serde(rename = "latitude")]
     latitude: String,
@@ -199,12 +202,30 @@ pub struct Station {
     #[serde(rename = "longitude")]
     longitude: String,
 
-    #[serde(rename = "html_url")]
-    html_url: String,
+    #[serde(rename = "elevation_m")]
+    elevation_m: String,
 
-    #[serde(rename = "rss_url")]
-    rss_url: String,
+    #[serde(rename = "site")]
+    site: String,
 
-    #[serde(rename = "xml_url")]
-    xml_url: String,
+    #[serde(rename = "country")]
+    country: Option<String>,
+
+    #[serde(rename = "wmo_id")]
+    wmo_id: Option<String>,
+
+    #[serde(rename = "state")]
+    state: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DataSource {
+    #[serde(rename = "name")]
+    name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Request {
+    #[serde(rename = "type")]
+    request_type: String,
 }

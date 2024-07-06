@@ -231,8 +231,11 @@ pub enum Units {
     DegreesTrue,
 
     #[serde(rename = "Fahrenheit")]
-    #[default]
     Fahrenheit,
+
+    #[serde(rename = "Celcius")]
+    #[default]
+    Celcius,
 
     #[serde(rename = "inches")]
     Inches,
@@ -249,6 +252,7 @@ impl Display for Units {
         match self {
             Units::DegreesTrue => write!(f, "degrees true"),
             Units::Fahrenheit => write!(f, "fahrenheit"),
+            Units::Celcius => write!(f, "celcius"),
             Units::Inches => write!(f, "inches"),
             Units::Knots => write!(f, "knots"),
             Units::Percent => write!(f, "percent"),

@@ -1,6 +1,6 @@
-mod download;
-mod get_names;
-mod upload;
+pub mod download;
+pub mod get_names;
+pub mod upload;
 
 pub use download::*;
 pub use get_names::*;

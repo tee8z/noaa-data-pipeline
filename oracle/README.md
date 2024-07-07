@@ -6,6 +6,8 @@ When linking against a DuckDB library already on the system (so not using any of
 wget https://github.com/duckdb/duckdb/releases/download/v1.0.0/libduckdb-linux-amd64.zip
 mkdir duckdb_lib
 unzip libduckdb-linux-amd64.zip -d duckdb_lib
+cp duckdb_lib/lib*.so* /usr/local/lib/
+ldconfig
 ```
 * Then set the DUCKDB_LIB_DIR var to (or whatever the full path to the folder holding the library is at)
 ```
@@ -79,7 +81,7 @@ curl -H "Content-Type: multipart/form-data" -F "file=@/home/tee8z/repos/noaa-dat
 > Accept: */*
 > Content-Length: 36281
 > Content-Type: multipart/form-data; boundary=------------------------d8b9fa0cf983802b
-> 
+>
 * We are completely uploaded and fine
 * Mark bundle as not supporting multiuse
 < HTTP/1.1 200 OK
@@ -89,7 +91,7 @@ curl -H "Content-Type: multipart/form-data" -F "file=@/home/tee8z/repos/noaa-dat
 < vary: access-control-request-headers
 < content-length: 0
 < date: Sun, 14 Jan 2024 14:43:23 GMT
-< 
+<
 * Connection #0 to host localhost left intact
 ```
 

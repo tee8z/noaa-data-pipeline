@@ -25,7 +25,6 @@ pub struct ObservationData {
 
     #[serde(rename = "data")]
     pub data: CurrentData,
-
 }
 
 #[derive(Serialize, Deserialize)]
@@ -86,4 +85,3 @@ pub struct QualityControlFlags {
     #[serde(rename = "no_signal")]
     pub no_signal: Option<String>,
 }
-

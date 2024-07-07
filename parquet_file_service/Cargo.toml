@@ -2,6 +2,7 @@
 name = "parquet_file_service"
 version = "0.3.0"
 edition = "2021"
+repository = "https://github.com/tee8z/noaa-data-pipeline"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,10 +13,10 @@ time = { version = "0.3.25", features = ["parsing", "formatting"] }
 uuid = { version = "1.4.1", features = ["v4"] }
 anyhow = "1.0.72"
 mime = "0.3.17"
-hyper = "1.4.0"
-h2 = "0.4.5"
-axum = { version = "0.7.5", features = ["macros", "tracing", "multipart"] }
-tower-http = { version= "0.5.2", features = ["fs", "cors"] }
+hyper = "0.14.27"
+h2 = "0.3.24"
+axum = { version = "0.6.19", features = ["macros", "tracing", "multipart"] }
+tower-http = { version= "0.4.4", features = ["fs", "cors"] }
 futures = "0.3.28"
 serde = { version="1.0.188", features= ["derive"]}
 openssl = { version = "0.10.60", features = ["vendored"] }
@@ -29,8 +30,9 @@ clap = { version = "4.3.23", features = ["derive", "env"] }
 toml = "0.8.10"
 rustix = "0.38.19"
 scooby = "0.5.0"
-duckdb = { version = "0.10.2" }
+duckdb = { version = "0.10.2", features = ["bundled"] }
 regex = "1.10.3"
 
 [dev-dependencies]
+duckdb = { version = "0.10.2" }
 tower = "0.4.13"

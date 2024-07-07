@@ -2,6 +2,7 @@
 name = "daemon"
 version = "0.3.0"
 edition = "2021"
+repository = "https://github.com/tee8z/noaa-data-pipeline"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

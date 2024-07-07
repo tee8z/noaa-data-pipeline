@@ -5,16 +5,39 @@ members = ["daemon", "parquet_file_service"]
 
 [workspace.dependencies]
 anyhow = "1.0.75"
-parquet = "50.0.0"
+parquet = "52.1.0"
 log = "0.4.18"
 slog = "2.7.0"
 slog-term = "2.9.0"
 slog-async = "2.7.0"
 clap = { version = "4.3.23", features = ["derive", "env"] }
-reqwest = {version = "0.11.22", features=["stream"]}
+reqwest = {version = "0.12.5", features=["stream"]}
 tokio = { version = "1.35.1", features = ["full"] }
 tokio-util = "0.7.10"
 time = "0.3.31"
 openssl = { version = "0.10.60", features = ["vendored"] }
 config = "0.14.0"
 rustix = "0.38.19"
+
+# Config for 'cargo dist'
+[workspace.metadata.dist]
+# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.18.0"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["x86_64-unknown-linux-gnu"]
+# Publish jobs to run in CI
+pr-run-mode = "plan"
+# Whether to install an updater program
+install-updater = true
+
+[workspace.metadata.dist.dependencies.apt]
+musl-tools = '*'
+
+# The profile that 'cargo dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

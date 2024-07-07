@@ -26,17 +26,6 @@ pub struct ObservationData {
     #[serde(rename = "data")]
     pub data: CurrentData,
 
-    #[serde(rename = "_xmlns:xsd")]
-    pub xmlns_xsd: String,
-
-    #[serde(rename = "_xmlns:xsi")]
-    pub xmlns_xsi: String,
-
-    #[serde(rename = "_version")]
-    pub version: String,
-
-    #[serde(rename = "_xsi:noNamespaceSchemaLocation")]
-    pub xsi_no_namespace_schema_location: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -57,43 +46,25 @@ pub struct Metar {
     pub station_id: String,
 
     #[serde(rename = "observation_time")]
-    pub observation_time: String,
+    pub observation_time: Option<String>,
 
     #[serde(rename = "latitude")]
-    pub latitude: String,
+    pub latitude: Option<String>,
 
     #[serde(rename = "longitude")]
-    pub longitude: String,
+    pub longitude: Option<String>,
 
     #[serde(rename = "temp_c")]
-    pub temp_c: String,
+    pub temp_c: Option<String>,
 
     #[serde(rename = "dewpoint_c")]
-    pub dewpoint_c: String,
+    pub dewpoint_c: Option<String>,
 
     #[serde(rename = "wind_dir_degrees")]
-    pub wind_dir_degrees: String,
+    pub wind_dir_degrees: Option<String>,
 
     #[serde(rename = "wind_speed_kt")]
-    pub wind_speed_kt: String,
-
-    #[serde(rename = "visibility_statute_mi")]
-    pub visibility_statute_mi: String,
-
-    #[serde(rename = "altim_in_hg")]
-    pub altim_in_hg: String,
-
-    #[serde(rename = "quality_control_flags")]
-    pub quality_control_flags: QualityControlFlags,
-
-    #[serde(rename = "sky_condition")]
-    pub sky_condition: SkyConditionUnion,
-
-    #[serde(rename = "flight_category")]
-    pub flight_category: String,
-
-    #[serde(rename = "metar_type")]
-    pub metar_type: String,
+    pub wind_speed_kt: Option<String>,
 
     #[serde(rename = "elevation_m")]
     pub elevation_m: String,
@@ -112,24 +83,7 @@ pub struct QualityControlFlags {
 
     #[serde(rename = "auto_station")]
     pub auto_station: Option<String>,
-
     #[serde(rename = "no_signal")]
     pub no_signal: Option<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct SkyConditionElement {
-    #[serde(rename = "sky_cover")]
-    pub sky_cover: String,
-
-    #[serde(rename = "cloud_base_ft_agl")]
-    pub cloud_base_ft_agl: Option<String>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum SkyConditionUnion {
-    SkyConditionElement(SkyConditionElement),
-
-    SkyConditionElementArray(Vec<SkyConditionElement>),
-}

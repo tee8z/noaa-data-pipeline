@@ -6,7 +6,7 @@ use parquet::{
 use parquet_derive::ParquetRecordWriter;
 use slog::Logger;
 use std::sync::Arc;
-use time::{format_description::well_known::Rfc2822, macros::format_description, OffsetDateTime};
+use time::{format_description::well_known::Rfc3339, macros::format_description, OffsetDateTime};
 
 use crate::{CityWeather, Metar, ObservationData, Units, XmlFetcher};
 
@@ -31,21 +31,43 @@ impl TryFrom<Metar> for CurrentWeather {
     fn try_from(val: Metar) -> Result<Self, Self::Error> {
         Ok(CurrentWeather {
             station_id: val.station_id.clone(),
-            latitude: val.latitude.parse::<f64>()?,
-            longitude: val.longitude.parse::<f64>()?,
-            generated_at: OffsetDateTime::parse(&&val.observation_time, &Rfc2822)
-                .map_err(|e| anyhow!("error parsing observation_time time: {}", e))?,
-            temperature_value: val.temp_c.parse::<f64>().map(Some).unwrap_or(None),
+            latitude: val.latitude.unwrap_or(String::from("")).parse::<f64>()?,
+            longitude: val.longitude.unwrap_or(String::from("")).parse::<f64>()?,
+            generated_at: OffsetDateTime::parse(
+                &&val
+                    .observation_time
+                    .clone()
+                    .unwrap_or(OffsetDateTime::now_utc().to_string()),
+                &Rfc3339,
+            )
+            .map_err(|e| anyhow!("error parsing observation_time time: {} {:?}", e, val.observation_time))?,
+            temperature_value: val
+                .temp_c
+                .unwrap_or(String::from(""))
+                .parse::<f64>()
+                .map(Some)
+                .unwrap_or(None),
             temperature_unit_code: Units::Celcius.to_string(),
             wind_direction: val
                 .wind_dir_degrees
+                .unwrap_or(String::from(""))
                 .parse::<i64>()
                 .map(Some)
                 .unwrap_or(None),
             wind_direction_unit_code: Units::DegreesTrue.to_string(),
-            wind_speed: val.wind_speed_kt.parse::<i64>().map(Some).unwrap_or(None),
+            wind_speed: val
+                .wind_speed_kt
+                .unwrap_or(String::from(""))
+                .parse::<i64>()
+                .map(Some)
+                .unwrap_or(None),
             wind_speed_unit_code: Units::Knots.to_string(),
-            dewpoint_value: val.dewpoint_c.parse::<f64>().map(Some).unwrap_or(None),
+            dewpoint_value: val
+                .dewpoint_c
+                .unwrap_or(String::from(""))
+                .parse::<f64>()
+                .map(Some)
+                .unwrap_or(None),
             dewpoint_unit_code: Units::Celcius.to_string(),
         })
     }
@@ -136,18 +158,6 @@ pub fn create_observation_schema() -> Type {
             .build()
             .unwrap();
 
-    let relative_humidity = Type::primitive_type_builder("relative_humidity", PhysicalType::INT64)
-        .with_repetition(Repetition::OPTIONAL)
-        .build()
-        .unwrap();
-
-    let relative_humidity_unit_code =
-        Type::primitive_type_builder("relative_humidity_unit_code", PhysicalType::BYTE_ARRAY)
-            .with_repetition(Repetition::REQUIRED)
-            .with_logical_type(Some(LogicalType::String))
-            .build()
-            .unwrap();
-
     let wind_direction = Type::primitive_type_builder("wind_direction", PhysicalType::INT64)
         .with_repetition(Repetition::OPTIONAL)
         .build()
@@ -193,8 +203,6 @@ pub fn create_observation_schema() -> Type {
             Arc::new(generated_at),
             Arc::new(temperature_value),
             Arc::new(temperature_unit_code),
-            Arc::new(relative_humidity),
-            Arc::new(relative_humidity_unit_code),
             Arc::new(wind_direction),
             Arc::new(wind_direction_unit_code),
             Arc::new(wind_speed),
@@ -227,11 +235,22 @@ impl ObservationService {
 
         let mut observations = vec![];
         for value in converted_xml.data.metar.iter() {
+            if value.temp_c.is_none()
+                || value.longitude.is_none()
+                || value.latitude.is_none()
+                || value.observation_time.is_none()
+            {
+                // skip reading if missing key values
+                continue;
+            }
             let current: CurrentWeather = value.clone().try_into()?;
+
             let mut observation: Observation = current.try_into()?;
-            let city = city_weather.city_data.get(&observation.station_id).unwrap();
-            observation.station_name = city.station_name.clone();
-            observations.push(observation)
+            if let Some(city) = city_weather.city_data.get(&observation.station_id) {
+                // only add observation if we have a station_name with it
+                observation.station_name = city.station_name.clone();
+                observations.push(observation)
+            }
         }
         Ok(observations)
     }

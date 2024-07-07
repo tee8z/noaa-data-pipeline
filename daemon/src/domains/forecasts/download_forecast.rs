@@ -765,7 +765,7 @@ impl ForecastService {
             }
         }
 
-        info!(self.logger, "done waiting for data, contining");
+        info!(self.logger, "done waiting for data, continuing");
         let mut forecasts = vec![];
         for all_forecasts in forecast_data.lock().await.values() {
             for weather_forecats in all_forecasts {

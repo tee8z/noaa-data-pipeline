@@ -18,9 +18,9 @@
 
 ### How the system works:
 - daemon:
-    - Background process to pull down data from NOAA and transform it into flatted parquet files. These files are then pushed to the `parquet_file_service` via the REST endpoint `POST http://localhost:9100/file` (via multipart form)
-- parquet_file_service:
-    - A REST API that takes in the parquet files and allows downloading of them from a bones browser UI that is also hosted by the api.
+    - Background process to pull down data from NOAA and transform it into flatted parquet files. These files are then pushed to the `oracle` via the REST endpoint `POST http://localhost:9100/file` (via multipart form)
+- oracle:
+    - A REST API that takes in the parquet files and allows downloading of them from a browser UI that is also hosted by the api.
 - ui:
     - Holds the browser UI that's just an index.html and main.js file. It uses `@duckdb/duckdb-wasm` to allow the end user to query directly against the download parquet files
     - It uses `https://bulma.io/` for css styling
@@ -34,10 +34,10 @@
 
 ### Data Pipeline Process (arrows in direction of who initiates the talking): 
 ```
-[noaa api] <- [daemon] -> parquet files -> [parquet_file_service] <- parquet files <- [browser duck_db]
+[noaa api] <- [daemon] -> parquet files -> [oracle] <- parquet files <- [browser duck_db]
 ```
 
 ### How to use:
 - [Daemon](./daemon/README.md)
-- [Parquet_file_service](./parquet_file_service/README.md)
+- [Oracle](./oracle/README.md)
 - [Browser](./ui/README.md)

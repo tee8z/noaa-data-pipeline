@@ -1,11 +1,8 @@
 use axum::{
-    body::StreamBody,
-    extract::{Path, State},
-    http::{HeaderValue, Request, StatusCode},
+    body::Body, extract::{Path, State}, http::{HeaderValue, Request, StatusCode}
 };
 use hyper::{
-    header::{CONTENT_DISPOSITION, CONTENT_TYPE},
-    Body, HeaderMap,
+    header::{CONTENT_DISPOSITION, CONTENT_TYPE}, HeaderMap,
 };
 use slog::error;
 use std::sync::Arc;
@@ -19,7 +16,7 @@ pub async fn download(
     State(state): State<Arc<AppState>>,
     Path(filename): Path<String>,
     _request: Request<Body>,
-) -> Result<(HeaderMap, StreamBody<ReaderStream<File>>), (StatusCode, String)> {
+) -> Result<(HeaderMap, Body), (StatusCode, String)> {
     let file_pieces: Vec<String> = filename.split('_').map(|f| f.to_owned()).collect();
     let created_time = drop_suffix(file_pieces.last().unwrap(), ".parquet");
     let file_generated_at = OffsetDateTime::parse(&created_time, &Rfc3339).map_err(|e| {
@@ -51,7 +48,7 @@ pub async fn download(
     // convert the `AsyncRead` into a `Stream`
     let stream = ReaderStream::new(file);
     // convert the `Stream` into an `axum::body::HttpBody`
-    let body = StreamBody::new(stream);
+    let body = Body::from_stream(stream);
     let mut headers = HeaderMap::new();
     headers.insert(
         CONTENT_TYPE,

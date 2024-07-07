@@ -1,6 +1,6 @@
 level = "info"
 data_dir = "./weather_data"
-ui_dir = "./parquet_file_service/ui"
+ui_dir = "./oracle/ui"
 host = "127.0.0.1"
 port = "9100"
 remote_url = "http://127.0.0.1:9100"

@@ -1,7 +1,7 @@
 # [PROJECT_DIR]/Cargo.toml
 [workspace]
 resolver = "2"
-members = ["daemon", "parquet_file_service"]
+members = ["daemon", "oracle"]
 
 [workspace.dependencies]
 anyhow = "1.0.75"

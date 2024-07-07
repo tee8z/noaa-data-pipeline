@@ -63,34 +63,34 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'parquet_file_service'",
+            "name": "Debug executable 'oracle'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=parquet_file_service",
-                    "--package=parquet_file_service"
+                    "--bin=oracle",
+                    "--package=oracle"
                 ],
                 "filter": {
-                    "name": "parquet_file_service",
+                    "name": "oracle",
                     "kind": "bin"
                 }
             },
             "args": [],
-            "cwd": "${workspaceFolder}/parquet_file_service"
+            "cwd": "${workspaceFolder}/oracle"
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'parquet_file_service'",
+            "name": "Debug unit tests in executable 'oracle'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=parquet_file_service",
-                    "--package=parquet_file_service"
+                    "--bin=oracle",
+                    "--package=oracle"
                 ],
                 "filter": {
-                    "name": "parquet_file_service",
+                    "name": "oracle",
                     "kind": "bin"
                 }
             },

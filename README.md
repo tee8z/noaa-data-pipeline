@@ -12,7 +12,7 @@
 
 ### Where data comes from:
 - Info on where the data used to generate the parquet files comes from:
-    - Observations: https://w1.weather.gov/xml/current_obs/all_xml.zip
+    - Observations: https://madis.ncep.noaa.gov/madis_metar.shtml accessed via https://aviationweather.gov/data/api/
     - Forecasts (Multiple Point Un-summarized Data): https://graphical.weather.gov/xml/rest.php
 - These xml data files are updated once an hour by NOAA, so to be respectful of their services we run our data pulling process once an hour as well
 

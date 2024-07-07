@@ -1,10 +1,13 @@
 use axum::{
-    body::Body, extract::{Path, State}, http::{HeaderValue, Request, StatusCode}
+    body::Body,
+    extract::{Path, State},
+    http::{HeaderValue, Request, StatusCode},
 };
 use hyper::{
-    header::{CONTENT_DISPOSITION, CONTENT_TYPE}, HeaderMap,
+    header::{CONTENT_DISPOSITION, CONTENT_TYPE},
+    HeaderMap,
 };
-use slog::error;
+use log::error;
 use std::sync::Arc;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::fs::File;
@@ -12,6 +15,17 @@ use tokio_util::io::ReaderStream;
 
 use crate::{drop_suffix, AppState};
 
+#[utoipa::path(
+    get,
+    path = "file/{filename}",
+    params(
+         ("filename" = String, Path, description = "Name of file to download"),
+    ),
+    responses(
+        (status = OK, description = "Successfully retrieved file", body = Body),
+        (status = BAD_REQUEST, description = "Invalid file name"),
+        (status = INTERNAL_SERVER_ERROR, description = "Failed to retrieve file by name")
+    ))]
 pub async fn download(
     State(state): State<Arc<AppState>>,
     Path(filename): Path<String>,
@@ -21,8 +35,8 @@ pub async fn download(
     let created_time = drop_suffix(file_pieces.last().unwrap(), ".parquet");
     let file_generated_at = OffsetDateTime::parse(&created_time, &Rfc3339).map_err(|e| {
         error!(
-            state.logger,
-            "error stored filename does not have a valid rfc3339 datetime in name: {}", e
+            "error stored filename does not have a valid rfc3339 datetime in name: {}",
+            e
         );
         (
             StatusCode::BAD_REQUEST,
@@ -33,15 +47,12 @@ pub async fn download(
         )
     })?;
     // split filename for the date, add that to the path
-    let file_path = format!(
-        "{}/{}/{}",
-        state.data_dir,
-        file_generated_at.date(),
-        filename
-    );
+    let file_path = state
+        .file_access
+        .build_file_path(&filename, file_generated_at);
 
     let file = File::open(file_path).await.map_err(|err| {
-        error!(state.logger, "error opening file: {}", err);
+        error!("error opening file: {}", err);
         (StatusCode::NOT_FOUND, format!("File not found: {}", err))
     })?;
 

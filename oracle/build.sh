@@ -17,6 +17,8 @@ fi
 
 wget "https://github.com/duckdb/duckdb/releases/download/v1.0.0/libduckdb-linux-amd64.zip"
 unzip libduckdb-linux-amd64.zip -d duckdb_lib
+cp duckdb_lib/lib*.so* /usr/local/lib/
+ldconfig
 rm libduckdb-linux-amd64.zip
 echo "$(pwd)/duckdb_lib"
 DUCKDB_LIB_DIR="$(pwd)/duckdb_lib" cargo build

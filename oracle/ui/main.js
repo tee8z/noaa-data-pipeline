@@ -33,10 +33,10 @@ clearButton.addEventListener('click', clearQuerys);
 
 // Setting the date
 const currentUTCDate = new Date();
-const oneDayAgoUTCDate = new Date(currentUTCDate.getTime() - 86400000);
-const rfc3339TimeOneDayAgo = oneDayAgoUTCDate.toISOString();
+const fourHoursAgoUTCDate = new Date(currentUTCDate.getTime() - 14400000);
+const rfc3339TimeFourHoursAgo = fourHoursAgoUTCDate.toISOString();
 const startTime = document.getElementById('start');
-startTime.value = rfc3339TimeOneDayAgo;
+startTime.value = rfc3339TimeFourHoursAgo;
 
 const rfc3339TimeUTC = currentUTCDate.toISOString();
 const endTime = document.getElementById('end');

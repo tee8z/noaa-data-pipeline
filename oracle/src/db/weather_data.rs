@@ -8,24 +8,23 @@ use regex::Regex;
 use scooby::postgres::{select, with, Aliasable, Parameters, Select};
 use serde::{Deserialize, Serialize};
 use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime};
-use tokio::sync::Mutex;
 
 use crate::{file_access, FileAccess, FileParams, ForecastRequest, ObservationRequest};
 
 pub struct WeatherData {
-    //TODO: see if we should make a new connection every time or keep it shared
-    conn: Arc<Mutex<Connection>>,
     file_access: Arc<FileAccess>,
 }
 
 impl WeatherData {
     pub fn new(file_access: Arc<FileAccess>) -> Result<Self, duckdb::Error> {
+        Ok(Self { file_access })
+    }
+
+    /// Creates new in-memory connection, making it so we always start with a fresh slate and no possible locking issues
+    pub fn open_connection(&self) -> Result<Connection, duckdb::Error> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("INSTALL parquet; LOAD parquet;")?;
-        Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
-            file_access,
-        })
+        Ok(conn)
     }
 
     pub async fn query(
@@ -36,7 +35,7 @@ impl WeatherData {
         let re = Regex::new(r"\$(\d+)").unwrap();
         let binding = select.to_string();
         let fixed_params = re.replace_all(&binding, "?");
-        let conn = self.conn.lock().await;
+        let conn = self.open_connection()?;
         let mut stmt = conn.prepare(&fixed_params)?;
         let sql_params = params_from_iter(params.iter());
         Ok(stmt.query_arrow(sql_params)?.collect())

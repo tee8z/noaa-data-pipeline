@@ -1,3 +1,3 @@
-pub mod routes;
+pub mod weather_routes;
 
-pub use routes::*;
+pub use weather_routes::*;

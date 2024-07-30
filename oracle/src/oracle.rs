@@ -112,6 +112,7 @@ impl Oracle {
 
     pub async fn sign_event(
         &self,
+        event_id: &Uuid,
         sign_event: SignEvent,
     ) -> Result<OracleAttestation, OracleError> {
         Ok(OracleAttestation {})

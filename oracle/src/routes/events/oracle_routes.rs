@@ -107,10 +107,15 @@ pub async fn sign_event(
     Path(event_id): Path<Uuid>,
     Json(body): Json<SignEvent>,
 ) -> Result<Json<OracleAttestation>, ErrorResponse> {
-    state.oracle.sign_event(body).await.map(Json).map_err(|e| {
-        error!("error signing event data: {}", e);
-        e.into()
-    })
+    state
+        .oracle
+        .sign_event(&event_id, body)
+        .await
+        .map(Json)
+        .map_err(|e| {
+            error!("error signing event data: {}", e);
+            e.into()
+        })
 }
 
 impl IntoResponse for OracleError {

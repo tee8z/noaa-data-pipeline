@@ -31,14 +31,14 @@ pub struct AppState {
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        routes::events::routes::get_pubkey,
-        routes::events::routes::list_events,
-        routes::events::routes::create_event,
-        routes::events::routes::get_event,
-        routes::events::routes::sign_event,
-        routes::stations::routes::forecasts,
-        routes::stations::routes::observations,
-        routes::stations::routes::get_stations,
+        routes::events::oracle_routes::get_pubkey,
+        routes::events::oracle_routes::list_events,
+        routes::events::oracle_routes::create_event,
+        routes::events::oracle_routes::get_event,
+        routes::events::oracle_routes::sign_event,
+        routes::stations::weather_routes::forecasts,
+        routes::stations::weather_routes::observations,
+        routes::stations::weather_routes::get_stations,
         routes::files::download::download,
         routes::files::get_names::files,
         routes::files::upload::upload,

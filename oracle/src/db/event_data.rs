@@ -5,7 +5,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub struct EventData {
-    //TODO: see if there is a read/write lock we can use here instead and be aware of bottleneck around locking that may occur under heavy loads
+    // TODO: see if a read/write lock makes more sense here (careful of writer starvation) and be aware of bottleneck around locking that may occur under heavy loads
+    // eventually we may need to come up with a pool or other non-locking approach for grabbing the connection, but that shouldn't appear until we hit a decent usage level
     conn: Arc<Mutex<Connection>>,
 }
 

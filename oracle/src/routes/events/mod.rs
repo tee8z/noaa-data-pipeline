@@ -1,3 +1,3 @@
-pub mod routes;
+pub mod oracle_routes;
 
-pub use routes::*;
+pub use oracle_routes::*;

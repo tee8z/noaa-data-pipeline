@@ -12,9 +12,16 @@ use axum::{
 use dlctix::bitcoin::XOnlyPublicKey;
 use hyper::StatusCode;
 use log::error;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{borrow::Borrow, sync::Arc};
+use utoipa::ToSchema;
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct Pubkey {
+    pub key: String,
+}
 
 #[utoipa::path(
     get,
@@ -22,10 +29,22 @@ use uuid::Uuid;
     responses(
         (status = OK, description = "Successfully retrieved oracle's pubkey data", body = XOnlyPublicKey),
     ))]
-pub async fn get_pubkey(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<XOnlyPublicKey>, ErrorResponse> {
-    Ok(Json(state.oracle.public_key()))
+pub async fn get_pubkey(State(state): State<Arc<AppState>>) -> Result<Json<Pubkey>, ErrorResponse> {
+    Ok(Json(Pubkey {
+        key: state.oracle.public_key(),
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/oracle/npub",
+    responses(
+        (status = OK, description = "Successfully retrieved oracle's nostr npub", body = String),
+    ))]
+pub async fn get_npub(State(state): State<Arc<AppState>>) -> Result<Json<Pubkey>, ErrorResponse> {
+    Ok(Json(Pubkey {
+        key: state.oracle.npub()?,
+    }))
 }
 
 #[utoipa::path(
@@ -123,6 +142,8 @@ impl IntoResponse for OracleError {
         let (status, error_message) = match self.borrow() {
             OracleError::EventNotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
             OracleError::PrivateKey(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            OracleError::ConvertKey(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            OracleError::Base32Key(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
             OracleError::MinOutcome(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             OracleError::EventMaturity(_) => (StatusCode::BAD_REQUEST, self.to_string()),
         };

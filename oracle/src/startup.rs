@@ -1,6 +1,6 @@
 use crate::{
-    create_event, download, files, forecasts, get_event, get_pubkey, get_stations, index_handler,
-    list_events, observations,
+    create_event, download, files, forecasts, get_event, get_npub, get_pubkey, get_stations,
+    index_handler, list_events, observations,
     oracle::{self, Oracle},
     routes, sign_event, upload, EventData, FileAccess, WeatherData,
 };
@@ -31,6 +31,7 @@ pub struct AppState {
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        routes::events::oracle_routes::get_npub,
         routes::events::oracle_routes::get_pubkey,
         routes::events::oracle_routes::list_events,
         routes::events::oracle_routes::create_event,
@@ -105,6 +106,7 @@ pub fn app(
         .route("/stations", get(get_stations))
         .route("/stations/forecasts", get(forecasts))
         .route("/stations/observations", get(observations))
+        .route("/oracle/npub", get(get_npub))
         .route("/oracle/pubkey", get(get_pubkey))
         .route("/oracle/events", get(list_events))
         .route("/oracle/events", post(create_event))

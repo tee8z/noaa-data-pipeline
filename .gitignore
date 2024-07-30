@@ -20,3 +20,4 @@ event_data/
 .env
 duckdb_lib
 */duckdb_lib
+*.pem

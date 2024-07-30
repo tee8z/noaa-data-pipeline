@@ -1,10 +1,17 @@
 use crate::{EventData, WeatherData};
 use anyhow::anyhow;
 use dlctix::{
-    bitcoin::{key::Secp256k1, XOnlyPublicKey},
+    bitcoin::{
+        bech32::encode,
+        hex::{Case, DisplayHex},
+        key::Secp256k1,
+        XOnlyPublicKey,
+    },
     musig2::secp256k1::{rand, PublicKey, SecretKey},
 };
+use nostr::{key::Keys, nips::nip19::ToBech32};
 use pem_rfc7468::{decode_vec, encode_string};
+use scooby::postgres::select;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{metadata, File},
@@ -27,6 +34,12 @@ pub enum OracleError {
     MinOutcome(String),
     #[error("Event maturity epoch must be in the future: {0}")]
     EventMaturity(String),
+    #[error("Failed to convert private key into nostr keys: {0}")]
+    ConvertKey(#[from] nostr::key::Error),
+    #[error("Failed to convert public key into nostr base32 format: {0}")]
+    Base32Key(#[from] nostr::nips::nip19::Error),
+    #[error("Failed to query datasource: {0}")]
+    DataQuery(#[from] duckdb::Error),
 }
 
 pub struct Oracle {
@@ -76,12 +89,21 @@ impl Oracle {
         })
     }
 
-    pub fn public_key(&self) -> XOnlyPublicKey {
-        let (key, _) = self.public_key.x_only_public_key();
-        key
+    pub fn public_key(&self) -> String {
+        self.public_key.x_only_public_key().0.to_string()
+    }
+
+    pub fn npub(&self) -> Result<String, OracleError> {
+        let secret_key = self.private_key.display_secret().to_string();
+        let keys = Keys::parse(secret_key)?;
+
+        Ok(keys.public_key().to_bech32()?)
     }
 
     pub async fn list_events(&self) -> Result<Vec<OracleEventData>, OracleError> {
+        // TODO: add filter/pagination etc.
+        let events = select(("event_id", "outcomes", "")).from("events");
+        let records = self.event_data.query(events, vec![]).await?;
         Ok(vec![])
     }
 

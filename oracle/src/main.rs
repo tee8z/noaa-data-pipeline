@@ -10,9 +10,7 @@ async fn main() -> anyhow::Result<()> {
     setup_logger(&cli).apply()?;
     let weather_data = cli.weather_dir.unwrap_or(String::from("./weather_data"));
     create_folder(&weather_data.clone());
-    let event_data = cli
-        .event_db
-        .unwrap_or(String::from("./event_data/event.db3"));
+    let event_data = cli.event_db.unwrap_or(String::from("./event_data"));
     create_folder(&event_data.clone());
     let socket_addr = SocketAddr::from_str(&format!(
         "{}:{}",

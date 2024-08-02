@@ -1,17 +1,11 @@
-use crate::{EventData, WeatherData};
+use crate::{utc_datetime, EventData, WeatherData};
 use anyhow::anyhow;
 use dlctix::{
-    bitcoin::{
-        bech32::encode,
-        hex::{Case, DisplayHex},
-        key::Secp256k1,
-        XOnlyPublicKey,
-    },
+    bitcoin::key::Secp256k1,
     musig2::secp256k1::{rand, PublicKey, SecretKey},
 };
 use nostr::{key::Keys, nips::nip19::ToBech32};
 use pem_rfc7468::{decode_vec, encode_string};
-use scooby::postgres::select;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{metadata, File},
@@ -52,20 +46,58 @@ pub struct Oracle {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct OracleEventData {}
-
-//TODO: make the outcomes possible winning scores
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CreateEvent {
-    pub event_id: String,
-    pub outcomes: Vec<Vec<u8>>,
-    pub event_maturity_epoch: u32,
+pub struct CreateOracleEventData {
+    #[serde(with = "utc_datetime")]
+    pub signing_date: OffsetDateTime,
+    #[serde(with = "utc_datetime")]
+    pub observation_date: OffsetDateTime,
+    #[serde(with = "utc_datetime")]
+    pub expiration_date: OffsetDateTime,
+    // NOAA observation stations used in this event
+    pub locations: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct SignEvent {
-    pub id: u32,
-    pub outcome: String,
+pub struct OracleEventData {
+    pub id: Uuid,
+    #[serde(with = "utc_datetime")]
+    pub signing_date: OffsetDateTime,
+    #[serde(with = "utc_datetime")]
+    pub observation_date: OffsetDateTime,
+    // NOAA observation stations used in this event
+    pub locations: Vec<String>,
+    pub outcomes: Vec<WeatherEntry>,
+    //Signature that this was the outcome of the event
+    pub attestation_sign: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct WeatherEntry {
+    pub entry_id: Uuid,
+    pub events: Vec<WeatherEvent>,
+    pub score: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct WeatherEvent {
+    // NOAA weather stations we're using
+    pub stations: String,
+    // What UTC day these values must have occured,
+    // midnight of that day we're taking measurements froms
+    #[serde(with = "utc_datetime")]
+    pub date: OffsetDateTime,
+    // Temp value in celcius
+    pub temp_max: Option<i64>,
+    // Temp value in celcius
+    pub temp_min: Option<i64>,
+    pub wind_speed: Option<i64>,
+}
+
+//TODO: make the outcomes possible winning scores
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct AddEventEntry {
+    pub event_id: String,
+    pub outcome: WeatherEntry,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -132,40 +164,26 @@ impl Oracle {
 
     pub async fn list_events(&self) -> Result<Vec<OracleEventData>, OracleError> {
         // TODO: add filter/pagination etc.
+        // filter on active event/completed event/time range of event
         Ok(vec![])
     }
 
     pub async fn get_event(&self, id: &Uuid) -> Result<OracleEventData, OracleError> {
+        // use this end point to grab event signature if completed etc.
         Ok(OracleEventData {})
     }
 
     pub async fn create_event(
         &self,
-        create_event: CreateEvent,
-    ) -> Result<OracleAnnouncement, OracleError> {
-        //TODO: move validation into struct itself
-        if create_event.outcomes.is_empty() {
-            return Err(OracleError::MinOutcome(format!(
-                "event_id: {}",
-                create_event.event_id,
-            )));
-        }
-
-        if create_event.event_maturity_epoch < now() {
-            return Err(OracleError::EventMaturity(format!(
-                "event_id: {}, maturity: {}",
-                create_event.event_id, create_event.event_maturity_epoch,
-            )));
-        }
-        Ok(OracleAnnouncement {})
+        event: CreateOracleEventData,
+    ) -> Result<OracleEventData, OracleError> {
+        Ok(OracleEventData {})
     }
 
-    pub async fn sign_event(
-        &self,
-        event_id: &Uuid,
-        sign_event: SignEvent,
-    ) -> Result<OracleAttestation, OracleError> {
-        Ok(OracleAttestation {})
+    pub async fn add_event_entry(&self, event_entry: AddEventEntry) -> Result<(), OracleError> {
+        //TODO: move validation into struct itself
+
+        Ok(())
     }
 }
 

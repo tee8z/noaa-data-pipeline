@@ -9,7 +9,6 @@ use axum::{
     response::{ErrorResponse, IntoResponse, Response},
     Json,
 };
-use dlctix::bitcoin::XOnlyPublicKey;
 use hyper::StatusCode;
 use log::error;
 use serde::{Deserialize, Serialize};
@@ -146,6 +145,8 @@ impl IntoResponse for OracleError {
             OracleError::Base32Key(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
             OracleError::MinOutcome(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             OracleError::EventMaturity(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+            OracleError::DataQuery(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            OracleError::MismatchPubkey(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
         };
         let body = Json(json!({
             "error": error_message,

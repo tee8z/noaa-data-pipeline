@@ -34,6 +34,7 @@ async fn main() -> anyhow::Result<()> {
         cli.oracle_private_key
             .unwrap_or(String::from("./oracle_private_key.pem")),
     )
+    .await
     .map_err(|e| {
         error!("erorr building app: {}", e);
         e

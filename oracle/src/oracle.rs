@@ -40,6 +40,8 @@ pub enum OracleError {
     Base32Key(#[from] nostr::nips::nip19::Error),
     #[error("Failed to query datasource: {0}")]
     DataQuery(#[from] duckdb::Error),
+    #[error("Pubkeys in DB doesn't match with .pem")]
+    MismatchPubkey(String),
 }
 
 pub struct Oracle {
@@ -73,7 +75,7 @@ pub struct OracleAttestation {}
 pub struct OracleAnnouncement {}
 
 impl Oracle {
-    pub fn new(
+    pub async fn new(
         event_data: Arc<EventData>,
         weather_data: Arc<WeatherData>,
         private_key_file_path: &String,
@@ -81,12 +83,40 @@ impl Oracle {
         let secret_key = get_key(private_key_file_path)?;
         let secp = Secp256k1::new();
         let public_key = secret_key.public_key(&secp);
-        Ok(Self {
+        let oracle = Self {
             event_data,
             weather_data,
             private_key: secret_key,
             public_key,
-        })
+        };
+        oracle.validate_oracle_metadata().await?;
+        Ok(oracle)
+    }
+
+    pub async fn validate_oracle_metadata(&self) -> Result<(), OracleError> {
+        let stored_public_key = match self.event_data.get_stored_public_key().await {
+            Ok(key) => key,
+            Err(duckdb::Error::QueryReturnedNoRows) => {
+                self.add_meta_data().await?;
+                return Ok(());
+            }
+            Err(e) => return Err(OracleError::DataQuery(e)),
+        };
+        if stored_public_key != self.public_key.x_only_public_key().0 {
+            return Err(OracleError::MismatchPubkey(format!(
+                "stored_pubkey: {:?} pem_pubkey: {:?}",
+                stored_public_key,
+                self.public_key()
+            )));
+        }
+        Ok(())
+    }
+
+    async fn add_meta_data(&self) -> Result<(), OracleError> {
+        self.event_data
+            .add_oracle_metadata(self.public_key.x_only_public_key().0)
+            .await
+            .map_err(OracleError::DataQuery)
     }
 
     pub fn public_key(&self) -> String {
@@ -102,8 +132,6 @@ impl Oracle {
 
     pub async fn list_events(&self) -> Result<Vec<OracleEventData>, OracleError> {
         // TODO: add filter/pagination etc.
-        let events = select(("event_id", "outcomes", "")).from("events");
-        let records = self.event_data.query(events, vec![]).await?;
         Ok(vec![])
     }
 

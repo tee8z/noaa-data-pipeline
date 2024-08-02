@@ -60,7 +60,7 @@ pub struct AppState {
 )]
 struct ApiDoc;
 
-pub fn app(
+pub async fn app(
     remote_url: String,
     ui_dir: String,
     data_dir: String,
@@ -84,11 +84,7 @@ pub fn app(
     let event_db = Arc::new(
         EventData::new(&event_dir).map_err(|e| anyhow!("error setting up event data: {}", e))?,
     );
-    let oracle = Arc::new(Oracle::new(
-        event_db,
-        weather_db.clone(),
-        &private_key_file_path,
-    )?);
+    let oracle = Arc::new(Oracle::new(event_db, weather_db.clone(), &private_key_file_path).await?);
 
     let app_state = AppState {
         ui_dir,

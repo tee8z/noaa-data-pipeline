@@ -1,8 +1,10 @@
-use crate::{utc_datetime, EventData, WeatherData};
+use crate::{utc_datetime, EventData, Forecast, Observation, WeatherData};
 use anyhow::anyhow;
+use base64::{engine::general_purpose, Engine};
 use dlctix::{
     bitcoin::key::Secp256k1,
     musig2::secp256k1::{rand, PublicKey, SecretKey},
+    secp::{MaybePoint, MaybeScalar, Point},
 };
 use nostr::{key::Keys, nips::nip19::ToBech32};
 use pem_rfc7468::{decode_vec, encode_string};
@@ -47,64 +49,92 @@ pub struct Oracle {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateOracleEventData {
+    pub id: Uuid,
     #[serde(with = "utc_datetime")]
+    /// Time at which the attestation will be added to the event
     pub signing_date: OffsetDateTime,
     #[serde(with = "utc_datetime")]
+    /// Date of when the weather observations occured
     pub observation_date: OffsetDateTime,
-    #[serde(with = "utc_datetime")]
-    pub expiration_date: OffsetDateTime,
     // NOAA observation stations used in this event
     pub locations: Vec<String>,
+    pub total_allowed_entries: i64,
+    pub number_of_places_win: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OracleEventData {
     pub id: Uuid,
     #[serde(with = "utc_datetime")]
+    /// Time at which the attestation will be added to the event
     pub signing_date: OffsetDateTime,
     #[serde(with = "utc_datetime")]
+    /// Date of when the weather observations occured
     pub observation_date: OffsetDateTime,
+    /// Used in constructing the transactions
+    pub oracle_nonce: Point,
+    pub locking_points: Vec<MaybePoint>,
     // NOAA observation stations used in this event
     pub locations: Vec<String>,
-    pub outcomes: Vec<WeatherEntry>,
-    //Signature that this was the outcome of the event
-    pub attestation_sign: String,
+    /// Knowing the total number of entries, how many can place
+    /// The dlctix coordinator can determine how many transactions to create
+    pub total_allowed_entries: i64,
+    pub number_of_places_win: i64,
+    /// All entries into this event, will be ranked by score in the end
+    pub entries: Vec<WeatherEntry>,
+    pub weather_observations: Vec<ForecastObservations>,
+    /// When added it means the oracle has signed that the current data is the final result
+    pub attestation: Option<MaybeScalar>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ForecastObservations {
+    pub station_id: String,
+    #[serde(with = "utc_datetime")]
+    pub observed_date: OffsetDateTime,
+    pub observed_temp_low: i64,
+    pub observed_temp_high: i64,
+    pub observed_wind_speed: i64,
+    #[serde(with = "utc_datetime")]
+    pub forecasted_date: OffsetDateTime,
+    pub forecast_temp_low: i64,
+    pub forecast_temp_high: i64,
+    pub forecast_wind_speed: i64,
+}
+
+// Once submitted for now don't allow changes
+// Decide if we want to add a pubkey for who submitted the entry?
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct AddEventEntry {
+    pub event_id: Uuid,
+    pub expected_observations: Vec<WeatherChoices>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct WeatherEntry {
-    pub entry_id: Uuid,
-    pub events: Vec<WeatherEvent>,
+    // ID needs to be int here to make generating the locking_points easier (ie. predefined before a user enters)
+    pub id: i64,
+    pub event_id: Uuid,
+    pub expected_observations: Vec<WeatherChoices>,
     pub score: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct WeatherEvent {
+pub struct WeatherChoices {
     // NOAA weather stations we're using
     pub stations: String,
-    // What UTC day these values must have occured,
-    // midnight of that day we're taking measurements froms
-    #[serde(with = "utc_datetime")]
-    pub date: OffsetDateTime,
-    // Temp value in celcius
-    pub temp_max: Option<i64>,
-    // Temp value in celcius
-    pub temp_min: Option<i64>,
-    pub wind_speed: Option<i64>,
-}
-
-//TODO: make the outcomes possible winning scores
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct AddEventEntry {
-    pub event_id: String,
-    pub outcome: WeatherEntry,
+    pub temp_max: Option<ValueOptions>,
+    pub temp_min: Option<ValueOptions>,
+    pub wind_speed: Option<ValueOptions>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct OracleAttestation {}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct OracleAnnouncement {}
+pub enum ValueOptions {
+    Over,
+    // Par is what was forecast for the day for this value
+    Par,
+    Under,
+}
 
 impl Oracle {
     pub async fn new(
@@ -152,7 +182,8 @@ impl Oracle {
     }
 
     pub fn public_key(&self) -> String {
-        self.public_key.x_only_public_key().0.to_string()
+        let key = Point::from(self.public_key).serialize();
+        general_purpose::STANDARD.encode(key)
     }
 
     pub fn npub(&self) -> Result<String, OracleError> {
@@ -180,9 +211,10 @@ impl Oracle {
         Ok(OracleEventData {})
     }
 
-    pub async fn add_event_entry(&self, event_entry: AddEventEntry) -> Result<(), OracleError> {
-        //TODO: move validation into struct itself
-
+    pub async fn add_event_entry(
+        &self,
+        event_entry: AddEventEntry,
+    ) -> Result<WeatherEntry, OracleError> {
         Ok(())
     }
 }

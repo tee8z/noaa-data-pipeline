@@ -1,6 +1,7 @@
 use crate::{
     oracle::{
-        CreateEvent, OracleAnnouncement, OracleAttestation, OracleError, OracleEventData, SignEvent,
+        AddEventEntry, CreateEvent, OracleAnnouncement, OracleAttestation, OracleError,
+        OracleEventData, SignEvent, WeatherEntry,
     },
     AppState,
 };
@@ -18,7 +19,16 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct Base64Pubkey {
+    /// base64 representation of the compressed DER encoding of the publickey. This consists of a parity
+    /// byte at the beginning, which is either `0x02` (even parity) or `0x03` (odd parity),
+    /// followed by the big-endian encoding of the point's X-coordinate.
+    pub key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Pubkey {
+    /// nostr npub in string format
     pub key: String,
 }
 
@@ -26,10 +36,12 @@ pub struct Pubkey {
     get,
     path = "/oracle/pubkey",
     responses(
-        (status = OK, description = "Successfully retrieved oracle's pubkey data", body = XOnlyPublicKey),
+        (status = OK, description = "Successfully retrieved oracle's pubkey data", body = Base64Pubkey),
     ))]
-pub async fn get_pubkey(State(state): State<Arc<AppState>>) -> Result<Json<Pubkey>, ErrorResponse> {
-    Ok(Json(Pubkey {
+pub async fn get_pubkey(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Base64Pubkey>, ErrorResponse> {
+    Ok(Json(Base64Pubkey {
         key: state.oracle.public_key(),
     }))
 }
@@ -38,7 +50,7 @@ pub async fn get_pubkey(State(state): State<Arc<AppState>>) -> Result<Json<Pubke
     get,
     path = "/oracle/npub",
     responses(
-        (status = OK, description = "Successfully retrieved oracle's nostr npub", body = String),
+        (status = OK, description = "Successfully retrieved oracle's nostr npub", body = Pubkey),
     ))]
 pub async fn get_npub(State(state): State<Arc<AppState>>) -> Result<Json<Pubkey>, ErrorResponse> {
     Ok(Json(Pubkey {
@@ -55,24 +67,24 @@ pub async fn get_npub(State(state): State<Arc<AppState>>) -> Result<Json<Pubkey>
 pub async fn list_events(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<OracleEventData>>, ErrorResponse> {
+    // TODO: add filtering, the nested entries may end up being a bottleneck
     state.oracle.list_events().await.map(Json).map_err(|e| {
         error!("error retrieving event data: {}", e);
         e.into()
     })
 }
-
 #[utoipa::path(
     post,
     path = "/oracle/events",
     request_body = CreateEvent,
     responses(
-        (status = OK, description = "Successfully created oracle weather event", body = OracleAnnouncement),
+        (status = OK, description = "Successfully created oracle weather event", body = OracleEventData),
         (status = BAD_REQUEST, description = "Invalid event to be created"),
     ))]
 pub async fn create_event(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateEvent>,
-) -> Result<Json<OracleAnnouncement>, ErrorResponse> {
+) -> Result<Json<OracleEventData>, ErrorResponse> {
     state
         .oracle
         .create_event(body)
@@ -80,6 +92,29 @@ pub async fn create_event(
         .map(Json)
         .map_err(|e| {
             error!("error creating event data: {}", e);
+            e.into()
+        })
+}
+
+#[utoipa::path(
+    post,
+    path = "/oracle/events/entry",
+    request_body = AddEventEntry,
+    responses(
+        (status = OK, description = "Successfully add entry into oracle weather event", body = WeatherEntry),
+        (status = BAD_REQUEST, description = "Invalid entry to be created"),
+    ))]
+pub async fn add_event_entry(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AddEventEntry>,
+) -> Result<Json<WeatherEntry>, ErrorResponse> {
+    state
+        .oracle
+        .add_event_entry(body)
+        .await
+        .map(Json)
+        .map_err(|e| {
+            error!("error adding entry to event: {}", e);
             e.into()
         })
 }
@@ -105,33 +140,6 @@ pub async fn get_event(
         .map(Json)
         .map_err(|e| {
             error!("error event data: {}", e);
-            e.into()
-        })
-}
-
-#[utoipa::path(
-    post,
-    path = "/oracle/events/{event_id}/sign",
-    params(
-        ("event_id" = Uuid, Path, description = "ID of a weather event the oracle is tracking"),
-    ),
-    request_body = SignEvent,
-    responses(
-        (status = OK, description = "Successfully signed event data", body = OracleAttestation),
-        (status = NOT_FOUND, description = "Event not found for the provided ID"),
-    ))]
-pub async fn sign_event(
-    State(state): State<Arc<AppState>>,
-    Path(event_id): Path<Uuid>,
-    Json(body): Json<SignEvent>,
-) -> Result<Json<OracleAttestation>, ErrorResponse> {
-    state
-        .oracle
-        .sign_event(&event_id, body)
-        .await
-        .map(Json)
-        .map_err(|e| {
-            error!("error signing event data: {}", e);
             e.into()
         })
 }

@@ -1,4 +1,4 @@
-use crate::{utc_datetime, EventData, Forecast, Observation, WeatherData};
+use crate::{utc_datetime, EventData, WeatherData};
 use anyhow::anyhow;
 use base64::{engine::general_purpose, Engine};
 use dlctix::{
@@ -54,8 +54,10 @@ pub struct CreateOracleEventData {
     /// Time at which the attestation will be added to the event
     pub signing_date: OffsetDateTime,
     #[serde(with = "utc_datetime")]
-    /// Date of when the weather observations occured
+    /// Date of when the weather observations occured (midnight UTC), all entries must be made before this time
     pub observation_date: OffsetDateTime,
+    /// All entry_ids need to be generated at the events creation
+    pub entry_ids: Vec<Uuid>,
     // NOAA observation stations used in this event
     pub locations: Vec<String>,
     pub total_allowed_entries: i64,
@@ -73,14 +75,17 @@ pub struct OracleEventData {
     pub observation_date: OffsetDateTime,
     /// Used in constructing the transactions
     pub oracle_nonce: Point,
+
     pub locking_points: Vec<MaybePoint>,
     // NOAA observation stations used in this event
     pub locations: Vec<String>,
     /// Knowing the total number of entries, how many can place
     /// The dlctix coordinator can determine how many transactions to create
     pub total_allowed_entries: i64,
+    /// Needs to all be generated at the start
+    pub entry_ids: Vec<Uuid>,
     pub number_of_places_win: i64,
-    /// All entries into this event, will be ranked by score in the end
+    /// All entries into this event, wont be returned until date of observation begins and will be ranked by score
     pub entries: Vec<WeatherEntry>,
     pub weather_observations: Vec<ForecastObservations>,
     /// When added it means the oracle has signed that the current data is the final result
@@ -106,17 +111,17 @@ pub struct ForecastObservations {
 // Decide if we want to add a pubkey for who submitted the entry?
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AddEventEntry {
-    pub event_id: Uuid,
     pub expected_observations: Vec<WeatherChoices>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct WeatherEntry {
-    // ID needs to be int here to make generating the locking_points easier (ie. predefined before a user enters)
-    pub id: i64,
+    /// Picked at random from the list of possible ids that haven't been used yet
+    pub id: Uuid,
     pub event_id: Uuid,
     pub expected_observations: Vec<WeatherChoices>,
-    pub score: i64,
+    /// A score wont appear until the observation_date has begun
+    pub score: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -131,7 +136,7 @@ pub struct WeatherChoices {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum ValueOptions {
     Over,
-    // Par is what was forecast for the day for this value
+    // Par is what was forecasted for this value
     Par,
     Under,
 }
@@ -196,6 +201,8 @@ impl Oracle {
     pub async fn list_events(&self) -> Result<Vec<OracleEventData>, OracleError> {
         // TODO: add filter/pagination etc.
         // filter on active event/completed event/time range of event
+        // if we're not careful, this endpoint might bring down the whole server
+        // just due to the amount of data that can come out of it
         Ok(vec![])
     }
 

@@ -15,6 +15,7 @@ axum = { version = "0.7.5", features = [
     "multipart",
 ] }
 base64 = "0.22.1"
+bincode = "1.3.3"
 clap = { version = "4.3.23", features = ["derive", "env"] }
 config = "0.14.0"
 dlctix = "0.0.6"

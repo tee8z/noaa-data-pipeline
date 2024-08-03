@@ -1,14 +1,15 @@
-use crate::{utc_datetime, EventData, WeatherData};
+use crate::{
+    AddEventEntry, CreateOracleEventData, EventData, OracleEventData, WeatherData, WeatherEntry,
+};
 use anyhow::anyhow;
 use base64::{engine::general_purpose, Engine};
 use dlctix::{
     bitcoin::key::Secp256k1,
     musig2::secp256k1::{rand, PublicKey, SecretKey},
-    secp::{MaybePoint, MaybeScalar, Point},
+    secp::Point,
 };
 use nostr::{key::Keys, nips::nip19::ToBech32};
 use pem_rfc7468::{decode_vec, encode_string};
-use serde::{Deserialize, Serialize};
 use std::{
     fs::{metadata, File},
     io::{Read, Write},
@@ -16,7 +17,6 @@ use std::{
     sync::Arc,
 };
 use thiserror::Error;
-use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -45,100 +45,6 @@ pub struct Oracle {
     weather_data: Arc<WeatherData>,
     private_key: SecretKey,
     public_key: PublicKey,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CreateOracleEventData {
-    pub id: Uuid,
-    #[serde(with = "utc_datetime")]
-    /// Time at which the attestation will be added to the event
-    pub signing_date: OffsetDateTime,
-    #[serde(with = "utc_datetime")]
-    /// Date of when the weather observations occured (midnight UTC), all entries must be made before this time
-    pub observation_date: OffsetDateTime,
-    /// All entry_ids need to be generated at the events creation
-    pub entry_ids: Vec<Uuid>,
-    // NOAA observation stations used in this event
-    pub locations: Vec<String>,
-    pub total_allowed_entries: i64,
-    pub number_of_places_win: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct OracleEventData {
-    pub id: Uuid,
-    #[serde(with = "utc_datetime")]
-    /// Time at which the attestation will be added to the event
-    pub signing_date: OffsetDateTime,
-    #[serde(with = "utc_datetime")]
-    /// Date of when the weather observations occured
-    pub observation_date: OffsetDateTime,
-    /// Used in constructing the transactions
-    pub oracle_nonce: Point,
-
-    pub locking_points: Vec<MaybePoint>,
-    // NOAA observation stations used in this event
-    pub locations: Vec<String>,
-    /// Knowing the total number of entries, how many can place
-    /// The dlctix coordinator can determine how many transactions to create
-    pub total_allowed_entries: i64,
-    /// Needs to all be generated at the start
-    pub entry_ids: Vec<Uuid>,
-    pub number_of_places_win: i64,
-    /// All entries into this event, wont be returned until date of observation begins and will be ranked by score
-    pub entries: Vec<WeatherEntry>,
-    pub weather_observations: Vec<ForecastObservations>,
-    /// When added it means the oracle has signed that the current data is the final result
-    pub attestation: Option<MaybeScalar>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct ForecastObservations {
-    pub station_id: String,
-    #[serde(with = "utc_datetime")]
-    pub observed_date: OffsetDateTime,
-    pub observed_temp_low: i64,
-    pub observed_temp_high: i64,
-    pub observed_wind_speed: i64,
-    #[serde(with = "utc_datetime")]
-    pub forecasted_date: OffsetDateTime,
-    pub forecast_temp_low: i64,
-    pub forecast_temp_high: i64,
-    pub forecast_wind_speed: i64,
-}
-
-// Once submitted for now don't allow changes
-// Decide if we want to add a pubkey for who submitted the entry?
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct AddEventEntry {
-    pub expected_observations: Vec<WeatherChoices>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct WeatherEntry {
-    /// Picked at random from the list of possible ids that haven't been used yet
-    pub id: Uuid,
-    pub event_id: Uuid,
-    pub expected_observations: Vec<WeatherChoices>,
-    /// A score wont appear until the observation_date has begun
-    pub score: Option<i64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct WeatherChoices {
-    // NOAA weather stations we're using
-    pub stations: String,
-    pub temp_max: Option<ValueOptions>,
-    pub temp_min: Option<ValueOptions>,
-    pub wind_speed: Option<ValueOptions>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub enum ValueOptions {
-    Over,
-    // Par is what was forecasted for this value
-    Par,
-    Under,
 }
 
 impl Oracle {
@@ -203,31 +109,38 @@ impl Oracle {
         // filter on active event/completed event/time range of event
         // if we're not careful, this endpoint might bring down the whole server
         // just due to the amount of data that can come out of it
-        Ok(vec![])
+        self.event_data
+            .list_events()
+            .await
+            .map_err(OracleError::DataQuery)
     }
 
     pub async fn get_event(&self, id: &Uuid) -> Result<OracleEventData, OracleError> {
-        // use this end point to grab event signature if completed etc.
-        Ok(OracleEventData {})
+        self.event_data
+            .get_oracle_event(id)
+            .await
+            .map_err(OracleError::DataQuery)
     }
 
     pub async fn create_event(
         &self,
         event: CreateOracleEventData,
     ) -> Result<OracleEventData, OracleError> {
-        Ok(OracleEventData {})
+        self.event_data
+            .add_event(event)
+            .await
+            .map_err(OracleError::DataQuery)
     }
 
     pub async fn add_event_entry(
         &self,
         event_entry: AddEventEntry,
     ) -> Result<WeatherEntry, OracleError> {
-        Ok(())
+        self.event_data
+            .add_event_entry(event_entry)
+            .await
+            .map_err(OracleError::DataQuery)
     }
-}
-
-fn now() -> u32 {
-    OffsetDateTime::now_utc().unix_timestamp() as u32
 }
 
 fn get_key(file_path: &String) -> Result<SecretKey, anyhow::Error> {

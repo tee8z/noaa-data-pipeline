@@ -47,35 +47,55 @@ pub fn create_initial_schema(conn: &mut Connection) -> Result<(), duckdb::Error>
             CONSTRAINT one_row_check UNIQUE (singleton_constant)
     );
 
-    -- Primary table containing information about events,
-    -- contains a broken up oracle announcement, excluding the oracle pubkey which is in memory
     CREATE TABLE IF NOT EXISTS events (
         id UUID PRIMARY KEY,
-        announcement_signature BLOB NOT NULL,
-        oracle_event BLOB NOT NULL,
-        name TEXT NOT NULL UNIQUE,
-        announcement_event_id BLOB UNIQUE,
-        attestation_event_id BLOB UNIQUE,
+        total_allowed_entries INTEGER NOT NULL,
+        number_of_winners INTEGER NOT NULL,
+        signing_date TIMESTAMPTZ NOT NULL,
+        observation_date  TIMESTAMPTZ NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        nonce BLOB NOT NULL,
+        attestation_signature BLOB,
+        -- Predefined IDs to be used for all possible entries in the event
+        entry_ids UUID[],
+        locations TEXT[] NOT NULL,
+        locking_points BLOB[] NOT NULL
+    );
 
-    CREATE UNIQUE INDEX event_name_index ON events (name);
+    CREATE TYPE options AS ENUM ('over', 'par', 'under');
 
-    -- Table for storing the nonces for each event
-    -- The signature and outcome are optional, and are only filled in when the event is completed
-    CREATE TABLE event_nonces
+    CREATE TABLE events_entries
     (
         id UUID PRIMARY KEY,
-        event_id   UUID   NOT NULL REFERENCES events (id),
-        index      INTEGER   NOT NULL,
-        nonce      BLOB     NOT NULL UNIQUE,
-        signature  BLOB,
-        outcome    TEXT,
+        event_id UUID NOT NULL REFERENCES events (id),
+        expected_observations STRUCT(station TEXT NOT NULL, temp_low options, temp_high options, wind_speed options)[],
+        score INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
-    CREATE INDEX event_nonces_event_id_index ON event_nonces (event_id);
+
+    CREATE TABLE events_weather
+    (
+        id UUID PRIMARY KEY,
+        event_id UUID NOT NULL REFERENCES events (id),
+        weather_id UUID NOT NULL REFERENCES weather (id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE weather
+    (
+        id UUID PRIMARY KEY,
+        station_id TEXT NOT NULL,
+        date TIMESTAMPTZ NOT NULL,
+        event_id UUID NOT NULL REFERENCES events (id),
+        observed STRUCT(temp_low INTEGER NOT NULL, temp_high INTEGER NOT NULL, wind_speed INTEGER NOT NULL),
+        forecasted STRUCT(temp_low INTEGER NOT NULL, temp_high INTEGER NOT NULL, wind_speed INTEGER NOT NULL),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
 
     INSERT INTO db_version (version) VALUES (1);
     "#;

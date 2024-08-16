@@ -17,6 +17,26 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 #[tokio::test]
+async fn can_handle_no_events() {
+    let weather_data = MockWeatherAccess::new();
+    let test_app = spawn_app(Arc::new(weather_data)).await;
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri(String::from("/oracle/update"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::empty())
+        .unwrap();
+    let response = test_app
+        .app
+        .clone()
+        .oneshot(request)
+        .await
+        .expect("Failed to execute request.");
+    sleep(std::time::Duration::from_secs(1)).await;
+    assert!(response.status().is_success());
+}
+
+#[tokio::test]
 async fn can_get_event_run_etl_and_see_it_signed() {
     let mut weather_data = MockWeatherAccess::new();
     //called twice per ETL process

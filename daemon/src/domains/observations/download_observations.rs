@@ -34,13 +34,18 @@ impl TryFrom<Metar> for CurrentWeather {
             latitude: val.latitude.unwrap_or(String::from("")).parse::<f64>()?,
             longitude: val.longitude.unwrap_or(String::from("")).parse::<f64>()?,
             generated_at: OffsetDateTime::parse(
-                &&val
-                    .observation_time
+                &val.observation_time
                     .clone()
                     .unwrap_or(OffsetDateTime::now_utc().to_string()),
                 &Rfc3339,
             )
-            .map_err(|e| anyhow!("error parsing observation_time time: {} {:?}", e, val.observation_time))?,
+            .map_err(|e| {
+                anyhow!(
+                    "error parsing observation_time time: {} {:?}",
+                    e,
+                    val.observation_time
+                )
+            })?,
             temperature_value: val
                 .temp_c
                 .unwrap_or(String::from(""))

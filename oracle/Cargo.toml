@@ -7,32 +7,57 @@ repository = "https://github.com/tee8z/noaa-data-pipeline"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread"] }
-tokio-util = "0.7.10"
-time = { version = "0.3.25", features = ["parsing", "formatting"] }
-uuid = { version = "1.4.1", features = ["v4"] }
 anyhow = "1.0.72"
-mime = "0.3.17"
+axum = { version = "0.7.5", features = [
+    "macros",
+    "tokio",
+    "tracing",
+    "multipart",
+    "http1",
+] }
+base64 = "0.22.1"
+bincode = "1.3.3"
+clap = { version = "4.3.23", features = ["derive", "env"] }
+config = "0.14.0"
+dlctix = "0.0.6"
+nostr = "0.33.0"
+duckdb = { version = "1.0.0" }
+fern = { version = "0.6.2", features = ["colored"] }
+futures = "0.3.28"
 hyper = "1.4.0"
 h2 = "0.4.5"
-axum = { version = "0.7.5", features = ["macros", "tracing", "multipart"] }
-tower-http = { version= "0.5.2", features = ["fs", "cors"] }
-futures = "0.3.28"
-serde = { version="1.0.188", features= ["derive"]}
-openssl = { version = "0.10.60", features = ["vendored"] }
+itertools = "0.13.0"
+log = "0.4.21"
+mime = "0.3.17"
 num_cpus = "1.16.0"
-config = "0.14.0"
-log = "0.4.18"
-slog = "2.7.0"
-slog-term = "2.9.0"
-slog-async = "2.7.0"
-clap = { version = "4.3.23", features = ["derive", "env"] }
-toml = "0.8.10"
+openssl = { version = "0.10.60", features = ["vendored"] }
+pem-rfc7468 = { version = "0.7.0", features = ["alloc"] }
+rand = "0.8.5"
+regex = "1.10.3"
 rustix = "0.38.19"
 scooby = "0.5.0"
-duckdb = { version = "0.10.2", features = ["bundled"] }
-regex = "1.10.3"
+serde = { version = "1.0.188", features = ["derive"] }
+serde_json = "1.0.117"
+time = { version = "0.3.36", features = ["parsing", "formatting", "macros"] }
+thiserror = "1.0.62"
+tokio = { version = "1.35.1", features = [
+    "macros",
+    "rt-multi-thread",
+    "signal",
+] }
+tokio-util = "0.7.10"
+toml = "0.8.10"
+tower-http = { version = "0.5.2", features = ["fs", "cors"] }
+utoipa = { version = "4.2.3", features = [
+    "axum_extras",
+    "time",
+    "uuid",
+    "preserve_order",
+    "preserve_path_order",
+] }
+utoipa-scalar = { version = "0.1.0", features = ["axum"] }
+uuid = { version = "1.4.1", features = ["v7", "serde"] }
 
 [dev-dependencies]
-duckdb = { version = "0.10.2" }
 tower = "0.4.13"
+mockall = "0.13.0"

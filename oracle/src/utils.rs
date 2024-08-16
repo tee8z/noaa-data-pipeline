@@ -1,25 +1,29 @@
+use clap::{command, Parser};
+use fern::{
+    colors::{Color, ColoredLevelConfig},
+    Dispatch,
+};
+use log::{error, info, LevelFilter};
 use std::{
     env,
     fs::{self, File},
     io::Read,
     path::Path,
 };
+use time::{format_description::well_known::Iso8601, OffsetDateTime};
 
-use clap::{command, Parser};
-use slog::{error, info, o, Drain, Level, Logger};
-
-pub fn create_folder(logger: &Logger, root_path: &str) {
+pub fn create_folder(root_path: &str) {
     let path = Path::new(root_path);
 
     if !path.exists() || !path.is_dir() {
         // Create the folder if it doesn't exist
         if let Err(err) = fs::create_dir(path) {
-            error!(logger, "error creating folder: {}", err);
+            error!("error creating folder: {}", err);
         } else {
-            info!(logger, "folder created: {}", root_path);
+            info!("folder created: {}", root_path);
         }
     } else {
-        info!(logger, "folder already exists: {}", root_path);
+        info!("folder already exists: {}", root_path);
     }
 }
 
@@ -54,9 +58,17 @@ pub struct Cli {
     #[arg(short, long)]
     pub weather_dir: Option<String>,
 
+    /// Path to db holding dlc event data (default: event_data)
+    #[arg(short, long)]
+    pub event_db: Option<String>,
+
     /// Path to files used to make the browser UI (default: ./ui)
     #[arg(short, long)]
     pub ui_dir: Option<String>,
+
+    /// Path to oracle private key (default: ./oracle_private_key.pem)
+    #[arg(short, long)]
+    pub oracle_private_key: Option<String>,
 }
 
 pub fn get_config_info() -> Cli {
@@ -73,32 +85,47 @@ pub fn get_config_info() -> Cli {
     cli
 }
 
-pub fn setup_logger(cli: &Cli) -> Logger {
-    let log_level = if cli.level.is_some() {
+pub fn get_log_level(cli: &Cli) -> LevelFilter {
+    if cli.level.is_some() {
         let level = cli.level.as_ref().unwrap();
         match level.as_ref() {
-            "trace" => Level::Trace,
-            "debug" => Level::Debug,
-            "info" => Level::Info,
-            "warn" => Level::Warning,
-            "error" => Level::Error,
-            _ => Level::Info,
+            "trace" => LevelFilter::Trace,
+            "debug" => LevelFilter::Debug,
+            "info" => LevelFilter::Info,
+            "warn" => LevelFilter::Warn,
+            "error" => LevelFilter::Error,
+            _ => LevelFilter::Info,
         }
     } else {
         let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| String::from(""));
         match rust_log.to_lowercase().as_str() {
-            "trace" => Level::Trace,
-            "debug" => Level::Debug,
-            "info" => Level::Info,
-            "warn" => Level::Warning,
-            "error" => Level::Error,
-            _ => Level::Info,
+            "trace" => LevelFilter::Trace,
+            "debug" => LevelFilter::Debug,
+            "info" => LevelFilter::Info,
+            "warn" => LevelFilter::Warn,
+            "error" => LevelFilter::Error,
+            _ => LevelFilter::Info,
         }
-    };
+    }
+}
 
-    let decorator = slog_term::TermDecorator::new().build();
-    let drain = slog_term::CompactFormat::new(decorator).build().fuse();
-    let drain = slog_async::Async::new(drain).build().fuse();
-    let drain = drain.filter_level(log_level).fuse();
-    slog::Logger::root(drain, o!("version" => "0.5"))
+pub fn setup_logger() -> Dispatch {
+    let colors = ColoredLevelConfig::new()
+        .trace(Color::White)
+        .debug(Color::Cyan)
+        .info(Color::Blue)
+        .warn(Color::Yellow)
+        .error(Color::Magenta);
+
+    fern::Dispatch::new()
+        .format(move |out, message, record| {
+            out.finish(format_args!(
+                "[{} {}] {}: {}",
+                OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap(),
+                colors.color(record.level()),
+                record.target(),
+                message
+            ));
+        })
+        .chain(std::io::stdout())
 }

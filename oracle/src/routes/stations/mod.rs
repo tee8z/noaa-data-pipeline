@@ -1,7 +1,3 @@
-mod forecasts;
-mod get_stations;
-mod observations;
+pub mod weather_routes;
 
-pub use forecasts::*;
-pub use get_stations::*;
-pub use observations::*;
+pub use weather_routes::*;

@@ -15,7 +15,10 @@ stations.xml
 
 data/
 weather_data/
+event_data/
 */.env
 .env
 duckdb_lib
 */duckdb_lib
+*.pem
+*/test_data/*

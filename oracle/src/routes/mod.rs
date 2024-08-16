@@ -1,7 +1,9 @@
-mod files;
+pub mod events;
+pub mod files;
 mod home;
-mod stations;
+pub mod stations;
 
+pub use events::*;
 pub use files::*;
 pub use home::*;
 pub use stations::*;

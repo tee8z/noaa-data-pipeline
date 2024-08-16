@@ -296,6 +296,13 @@ impl Oracle {
             " etl_process_id {}, completed getting events to sign",
             etl_process_id
         );
+        if events_to_sign.is_empty() {
+            info!(
+                " etl_process_id {}, no events to sign, completed etl process",
+                etl_process_id
+            );
+            return Ok(());
+        }
         debug!(
             " etl_process_id {}, adding oracle signature to events",
             etl_process_id

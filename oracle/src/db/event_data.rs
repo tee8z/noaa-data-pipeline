@@ -598,14 +598,14 @@ impl EventData {
                 "observation_date::TEXT",
                 "locations",
                 "total_allowed_entries",
-                "event_entries.total_entries as total_entries",
+                "COALESCE(event_entries.total_entries,0) as total_entries",
                 "number_of_places_win",
                 "number_of_values_per_entry",
                 "attestation_signature",
             ))
             .from(
                 "events"
-                    .join("event_entries")
+                    .left_join("event_entries")
                     .on("event_entries.event_id = events.id"),
             );
         if let Some(ids) = filter.event_ids.clone() {
@@ -696,14 +696,14 @@ impl EventData {
                 "observation_date::TEXT",
                 "locations",
                 "total_allowed_entries",
-                "total_entries",
+                "COALESCE(event_entries.total_entries, 0) as total_entries",
                 "number_of_places_win",
                 "number_of_values_per_entry",
                 "attestation_signature",
             ))
             .from(
                 "events"
-                    .join("event_entries")
+                    .left_join("event_entries")
                     .on("event_entries.event_id = events.id"),
             )
             .where_("attestation_signature IS NULL"); //Only filter out events that have been signed

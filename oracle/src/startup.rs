@@ -15,7 +15,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use hyper::Method;
+use hyper::{Method, header::{ACCEPT, CONTENT_TYPE}};
 use log::info;
 use std::sync::Arc;
 use tower_http::{
@@ -103,7 +103,8 @@ pub fn app(app_state: AppState) -> Router {
     let serve_dir = ServeDir::new("ui").not_found_service(ServeFile::new(app_state.ui_dir.clone()));
     let cors = CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
-        .allow_methods([Method::GET, Method::POST])
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([ACCEPT,CONTENT_TYPE])
         // allow requests from any origin
         .allow_origin(Any);
     Router::new()

@@ -282,6 +282,254 @@ async fn can_get_event_run_etl_and_see_it_signed() {
     assert_eq!(attested_outcome, res.attestation);
 }
 
+#[tokio::test]
+async fn can_get_event_run_etl_and_see_it_signed_multiple_winners() {
+    let mut weather_data = MockWeatherAccess::new();
+    //called twice per ETL process
+    weather_data
+        .expect_forecasts_data()
+        .times(2)
+        .returning(|_, _| Ok(mock_forecast_data()));
+    weather_data
+        .expect_observation_data()
+        .times(2)
+        .returning(|_, _| Ok(mock_observation_data()));
+
+    let test_app = spawn_app(Arc::new(weather_data)).await;
+
+    // This makes the event window 1 day (what is used by the oracle)
+    let observation_date = OffsetDateTime::parse("2024-08-12T00:00:00+00:00", &Rfc3339).unwrap();
+    let signing_date = OffsetDateTime::parse("2024-08-13T00:00:00+00:00", &Rfc3339).unwrap();
+
+    let new_event_1 = CreateEvent {
+        id: Uuid::now_v7(),
+        observation_date,
+        signing_date,
+        locations: vec![
+            String::from("PFNO"),
+            String::from("KSAW"),
+            String::from("PAPG"),
+            String::from("KWMC"),
+        ],
+        total_allowed_entries: 4,
+        number_of_places_win: 2,
+        number_of_values_per_entry: 6,
+    };
+    info!("above create event");
+    let event = test_app.oracle.create_event(new_event_1).await.unwrap();
+    let entry_1 = AddEventEntry {
+        id: Uuid::now_v7(),
+        event_id: event.id,
+        expected_observations: vec![
+            WeatherChoices {
+                stations: String::from("PFNO"),
+                temp_low: Some(oracle::ValueOptions::Under),
+                temp_high: None,
+                wind_speed: Some(oracle::ValueOptions::Over),
+            },
+            WeatherChoices {
+                stations: String::from("KSAW"),
+                temp_low: None,
+                temp_high: None,
+                wind_speed: Some(oracle::ValueOptions::Over),
+            },
+            WeatherChoices {
+                stations: String::from("KWMC"),
+                temp_low: Some(oracle::ValueOptions::Par),
+                temp_high: Some(oracle::ValueOptions::Under),
+                wind_speed: Some(oracle::ValueOptions::Par),
+            },
+        ],
+    };
+    let entry_2 = AddEventEntry {
+        id: Uuid::now_v7(),
+        event_id: event.id,
+        expected_observations: vec![
+            WeatherChoices {
+                stations: String::from("PFNO"),
+                temp_low: Some(oracle::ValueOptions::Par),
+                temp_high: None,
+                wind_speed: Some(oracle::ValueOptions::Par),
+            },
+            WeatherChoices {
+                stations: String::from("KSAW"),
+                temp_low: Some(oracle::ValueOptions::Par),
+                temp_high: None,
+                wind_speed: Some(oracle::ValueOptions::Over),
+            },
+            WeatherChoices {
+                stations: String::from("KWMC"),
+                temp_low: Some(oracle::ValueOptions::Par),
+                temp_high: Some(oracle::ValueOptions::Under),
+                wind_speed: None,
+            },
+        ],
+    };
+    let entry_3 = AddEventEntry {
+        id: Uuid::now_v7(),
+        event_id: event.id,
+        expected_observations: vec![
+            WeatherChoices {
+                stations: String::from("PFNO"),
+                temp_low: Some(oracle::ValueOptions::Par),
+                temp_high: None,
+                wind_speed: Some(oracle::ValueOptions::Under),
+            },
+            WeatherChoices {
+                stations: String::from("KSAW"),
+                temp_low: Some(oracle::ValueOptions::Over),
+                temp_high: None,
+                wind_speed: Some(oracle::ValueOptions::Over),
+            },
+            WeatherChoices {
+                stations: String::from("KWMC"),
+                temp_low: Some(oracle::ValueOptions::Par),
+                temp_high: None,
+                wind_speed: Some(oracle::ValueOptions::Under),
+            },
+        ],
+    };
+    let entry_4 = AddEventEntry {
+        id: Uuid::now_v7(),
+        event_id: event.id,
+        expected_observations: vec![
+            WeatherChoices {
+                stations: String::from("PFNO"),
+                temp_low: Some(oracle::ValueOptions::Over),
+                temp_high: None,
+                wind_speed: Some(oracle::ValueOptions::Par),
+            },
+            WeatherChoices {
+                stations: String::from("KSAW"),
+                temp_low: None,
+                temp_high: Some(oracle::ValueOptions::Under),
+                wind_speed: Some(oracle::ValueOptions::Over),
+            },
+            WeatherChoices {
+                stations: String::from("KWMC"),
+                temp_low: Some(oracle::ValueOptions::Par),
+                temp_high: None,
+                wind_speed: Some(oracle::ValueOptions::Under),
+            },
+        ],
+    };
+    test_app
+        .oracle
+        .add_event_entry(entry_1.clone())
+        .await
+        .unwrap();
+    test_app
+        .oracle
+        .add_event_entry(entry_2.clone())
+        .await
+        .unwrap();
+    test_app
+        .oracle
+        .add_event_entry(entry_3.clone())
+        .await
+        .unwrap();
+    test_app
+        .oracle
+        .add_event_entry(entry_4.clone())
+        .await
+        .unwrap();
+
+    // 1) get event before etl
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/oracle/events/{}", event.id))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = test_app
+        .app
+        .clone()
+        .oneshot(request)
+        .await
+        .expect("Failed to execute request.");
+    assert!(response.status().is_success());
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let res: Event = from_slice(&body).unwrap();
+    assert_eq!(res.status, EventStatus::Completed);
+    assert!(res.attestation.is_none());
+
+    // 2) request etl to run
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri(String::from("/oracle/update"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = test_app
+        .app
+        .clone()
+        .oneshot(request)
+        .await
+        .expect("Failed to execute request.");
+    assert!(response.status().is_success());
+
+    // wait for etl to run in background
+    sleep(std::time::Duration::from_secs(2)).await;
+
+    // 3) get event after etl
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/oracle/events/{}", event.id))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = test_app
+        .app
+        .oneshot(request)
+        .await
+        .expect("Failed to execute request.");
+    assert!(response.status().is_success());
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let res: Event = from_slice(&body).unwrap();
+
+    // Verify the event was signed and status changed
+    assert_eq!(res.status, EventStatus::Signed);
+    assert!(res.attestation.is_some());
+
+    let mut entries = res.entries;
+    entries.sort_by_key(|entry| cmp::Reverse(entry.score));
+    info!("entries: {:?}", entries);
+    //Make sure the expected entries won and calculated the correct score for each
+    // We expect a tie between entry_1 and entry_3 with 4 pts
+    let entry_1_res = entries.iter().find(|entry| entry.id == entry_1.id).unwrap();
+    assert_eq!(entry_1_res.score.unwrap(), 4);
+    let entry_2_res = entries.iter().find(|entry| entry.id == entry_2.id).unwrap();
+    assert_eq!(entry_2_res.score.unwrap(), 3);
+    let entry_3_res = entries.iter().find(|entry| entry.id == entry_3.id).unwrap();
+    assert_eq!(entry_3_res.score.unwrap(), 4);
+    let entry_4_res = entries.iter().find(|entry| entry.id == entry_4.id).unwrap();
+    assert_eq!(entry_4_res.score.unwrap(), 1);
+
+    let winning_score_bytes: Vec<u8> = vec![4, 3]
+        .into_iter()
+        .flat_map(|val: i64| val.to_be_bytes())
+        .collect();
+
+    let outcome_index = event
+        .event_annoucement
+        .outcome_messages
+        .iter()
+        .position(|outcome| *outcome == winning_score_bytes)
+        .unwrap();
+
+    let attested_outcome = res.event_annoucement.attestation_secret(
+        outcome_index,
+        test_app.oracle.raw_private_key(),
+        res.nonce,
+    );
+
+    // Verify the attestation matches what we calculate in the test
+    assert_eq!(attested_outcome, res.attestation);
+}
+
 fn mock_forecast_data() -> Vec<Forecast> {
     vec![
         Forecast {

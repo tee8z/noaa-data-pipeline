@@ -602,6 +602,7 @@ impl EventData {
                 "number_of_places_win",
                 "number_of_values_per_entry",
                 "attestation_signature",
+                "nonce",
             ))
             .from(
                 "events"
@@ -863,6 +864,11 @@ impl CreateEventData {
         let possible_outcome_rankings: Vec<Vec<i64>> = possible_scores
             .iter()
             .combinations(number_of_places_win)
+            //Sort possible combinations in desc order
+            .map(|mut combos| {
+                combos.sort_by_key(|n| i64::MAX - *n);
+                combos
+            })
             .filter(|combination| {
                 // Check if the combination is sorted in descending order, if not filter out of possible outcomes
                 combination.windows(2).all(|window| window[0] >= window[1])
@@ -1196,6 +1202,8 @@ pub struct EventSummary {
     pub weather: Vec<Weather>,
     /// When added it means the oracle has signed that the current data is the final result
     pub attestation: Option<MaybeScalar>,
+    /// Used to sign the result of the event being watched
+    pub nonce: Scalar,
 }
 
 impl EventSummary {
@@ -1287,34 +1295,17 @@ impl<'a> TryFrom<&Row<'a>> for EventSummary {
                     }
                 })
                 .map_err(|e| duckdb::Error::FromSqlConversionFailure(8, Type::Any, Box::new(e)))?,
-            weather: row
+            nonce: row
                 .get::<usize, Value>(9)
                 .map(|raw| {
-                    let list_weather = match raw {
-                        Value::List(list) => list,
+                    let blob = match raw {
+                        Value::Blob(val) => val,
                         _ => vec![],
                     };
-                    let mut weather_data = vec![];
-                    for value in list_weather.iter() {
-                        if let Value::Struct(data) = value {
-                            let weather: Weather = match data.try_into() {
-                                Ok(val) => val,
-                                Err(e) => return Err(e),
-                            };
-                            weather_data.push(weather)
-                        }
-                    }
-                    Ok(weather_data)
+                    serde_json::from_slice(&blob)
                 })?
-                .map_err(|e| {
-                    duckdb::Error::DuckDBFailure(
-                        ffi::Error {
-                            code: ErrorCode::TypeMismatch,
-                            extended_code: 0,
-                        },
-                        Some(e.to_string()),
-                    )
-                })?,
+                .map_err(|e| duckdb::Error::FromSqlConversionFailure(9, Type::Any, Box::new(e)))?,
+            weather: vec![],
         };
         event_summary.update_status();
         Ok(event_summary)

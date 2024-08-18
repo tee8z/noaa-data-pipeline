@@ -10,6 +10,7 @@ use dlctix::{
     musig2::secp256k1::{rand, PublicKey, SecretKey},
     secp::Point,
 };
+use itertools::Itertools;
 use log::{debug, error, info, warn};
 use nostr::{key::Keys, nips::nip19::ToBech32};
 use pem_rfc7468::{decode_vec, encode_string};
@@ -501,10 +502,12 @@ impl Oracle {
         for event in events.iter_mut() {
             let mut entries = self.event_data.get_event_weather_entries(&event.id).await?;
             entries.sort_by_key(|entry| cmp::Reverse(entry.score));
+            // NOTE: there may be issues here if number of unique scores isn't as large as number_of_places_win
             let winners: Vec<i64> = entries
                 .iter()
-                .take(event.number_of_places_win as usize)
                 .map(|entry| entry.score.unwrap_or_default()) // default means '0' was winning score
+                .unique()
+                .take(event.number_of_places_win as usize)
                 .collect();
 
             let winner_bytes: Vec<u8> = winners

@@ -29,6 +29,7 @@ async fn can_create_entry_into_event() {
         total_allowed_entries: 100,
         number_of_places_win: 3,
         number_of_values_per_entry: 6,
+        coordinator: None,
     };
     let oracle_event = test_app.oracle.create_event(new_event).await.unwrap();
     let new_entry = AddEventEntry {
@@ -54,6 +55,7 @@ async fn can_create_entry_into_event() {
                 wind_speed: None,
             },
         ],
+        coordinator: None,
     };
     let body_json = to_string(&new_entry).unwrap();
     let request = Request::builder()
@@ -94,6 +96,7 @@ async fn can_create_and_get_event_entry() {
         total_allowed_entries: 100,
         number_of_places_win: 3,
         number_of_values_per_entry: 6,
+        coordinator: None,
     };
     let oracle_event = test_app.oracle.create_event(new_event).await.unwrap();
     let new_entry = AddEventEntry {
@@ -119,6 +122,7 @@ async fn can_create_and_get_event_entry() {
                 wind_speed: None,
             },
         ],
+        coordinator: None,
     };
     let body_json = to_string(&new_entry).unwrap();
     let request = Request::builder()

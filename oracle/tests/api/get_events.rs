@@ -30,6 +30,7 @@ async fn can_get_all_events() {
         total_allowed_entries: 100,
         number_of_places_win: 3,
         number_of_values_per_entry: 6,
+        coordinator: None,
     };
     let new_event_2 = CreateEvent {
         id: Uuid::now_v7(),
@@ -44,6 +45,7 @@ async fn can_get_all_events() {
         total_allowed_entries: 100,
         number_of_places_win: 3,
         number_of_values_per_entry: 6,
+        coordinator: None,
     };
     let new_event_3 = CreateEvent {
         id: Uuid::now_v7(),
@@ -58,6 +60,7 @@ async fn can_get_all_events() {
         total_allowed_entries: 100,
         number_of_places_win: 3,
         number_of_values_per_entry: 6,
+        coordinator: None,
     };
     let expected = vec![
         new_event_1.clone(),

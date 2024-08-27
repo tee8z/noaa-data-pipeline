@@ -9,7 +9,7 @@ use serde::Serialize;
 use time::OffsetDateTime;
 use utoipa::IntoParams;
 
-use crate::{utc_option_datetime, AppError, AppState, FileParams, Forecast, Observation, Station};
+use crate::{AppError, AppState, FileParams, Forecast, Observation, Station};
 
 #[utoipa::path(
     get,
@@ -36,10 +36,10 @@ pub async fn forecasts(
 
 #[derive(Clone, Serialize, Deserialize, IntoParams)]
 pub struct ForecastRequest {
-    #[serde(with = "utc_option_datetime")]
+    #[serde(with = "time::serde::rfc3339::option")]
     #[serde(default)]
     pub start: Option<OffsetDateTime>,
-    #[serde(with = "utc_option_datetime")]
+    #[serde(with = "time::serde::rfc3339::option")]
     #[serde(default)]
     pub end: Option<OffsetDateTime>,
     pub station_ids: String,
@@ -67,10 +67,10 @@ impl From<&ForecastRequest> for FileParams {
 
 #[derive(Clone, Serialize, Deserialize, IntoParams)]
 pub struct ObservationRequest {
-    #[serde(with = "utc_option_datetime")]
+    #[serde(with = "time::serde::rfc3339::option")]
     #[serde(default)]
     pub start: Option<OffsetDateTime>,
-    #[serde(with = "utc_option_datetime")]
+    #[serde(with = "time::serde::rfc3339::option")]
     #[serde(default)]
     pub end: Option<OffsetDateTime>,
     pub station_ids: String,

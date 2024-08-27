@@ -31,6 +31,7 @@ async fn can_create_oracle_event() {
         total_allowed_entries: 100,
         number_of_places_win: 3,
         number_of_values_per_entry: 6,
+        coordinator: None,
     };
     let body_json = to_string(&new_event).unwrap();
     let request = Request::builder()
@@ -89,6 +90,7 @@ async fn can_create_and_get_oracle_event() {
         total_allowed_entries: 100,
         number_of_places_win: 3,
         number_of_values_per_entry: 6,
+        coordinator: None,
     };
     let body_json = to_string(&new_event).unwrap();
     let request_post = Request::builder()

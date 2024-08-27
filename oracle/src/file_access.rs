@@ -7,13 +7,13 @@ use time::{
 use tokio::fs;
 use utoipa::IntoParams;
 
-use crate::{create_folder, subfolder_exists, utc_option_datetime};
+use crate::{create_folder, subfolder_exists};
 
 #[derive(Clone, Deserialize, Serialize, IntoParams)]
 pub struct FileParams {
-    #[serde(with = "utc_option_datetime")]
+    #[serde(with = "time::serde::rfc3339::option")]
     pub start: Option<OffsetDateTime>,
-    #[serde(with = "utc_option_datetime")]
+    #[serde(with = "time::serde::rfc3339::option")]
     pub end: Option<OffsetDateTime>,
     pub observations: Option<bool>,
     pub forecasts: Option<bool>,

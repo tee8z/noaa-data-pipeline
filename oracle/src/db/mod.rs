@@ -1,7 +1,7 @@
 use anyhow::anyhow;
-use dlctix::bitcoin::hashes::sha256;
+use dlctix::bitcoin::{hashes::sha256, XOnlyPublicKey};
 use dlctix::musig2::secp256k1::schnorr::Signature;
-use dlctix::musig2::secp256k1::{self, Message, PublicKey};
+use dlctix::musig2::secp256k1::{Message, PublicKey};
 use dlctix::secp::{MaybeScalar, Scalar};
 use dlctix::EventAnnouncement;
 use duckdb::arrow::datatypes::ToByteSlice;
@@ -23,16 +23,14 @@ pub use event_data::*;
 pub use event_db_migrations::*;
 pub use weather_data::{Forecast, Observation, Station, WeatherData};
 
-use crate::utc_datetime;
-
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateEvent {
     /// Client needs to provide a valid Uuidv7
     pub id: Uuid,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     /// Time at which the attestation will be added to the event, needs to be after the observation date
     pub signing_date: OffsetDateTime,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     /// Date of when the weather observations occured (midnight UTC), all entries must be made before this time
     pub observation_date: OffsetDateTime,
     /// NOAA observation stations used in this event
@@ -51,10 +49,10 @@ pub struct CreateEvent {
 pub struct CreateEventMessage {
     /// Client needs to provide a valid Uuidv7
     pub id: Uuid,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     /// Time at which the attestation will be added to the event, needs to be after the observation date
     pub signing_date: OffsetDateTime,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     /// Date of when the weather observations occured (midnight UTC), all entries must be made before this time
     pub observation_date: OffsetDateTime,
     /// NOAA observation stations used in this event
@@ -101,10 +99,10 @@ pub struct CoordinatorInfo {
 pub struct CreateEventData {
     /// Provide UUIDv7 to use for looking up the event
     pub id: Uuid,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     /// Time at which the attestation will be added to the event
     pub signing_date: OffsetDateTime,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     /// Date of when the weather observations occured (midnight UTC), all entries must be made before this time
     pub observation_date: OffsetDateTime,
     // NOAA observation stations used in this event
@@ -208,15 +206,14 @@ impl CreateEventData {
 }
 
 /// Validates the received messages was created by the provided pubkey
-pub fn validate(message: Message, pubkey: &str, signature: &str) -> Result<(), anyhow::Error> {
-    debug!("pubkey: {} signature: {}", pubkey, signature);
+pub fn validate(message: Message, pubkey_str: &str, signature: &str) -> Result<(), anyhow::Error> {
+    info!("pubkey: {} signature: {}", pubkey_str, signature);
     let raw_signature: Vec<u8> = hex::decode(signature).unwrap();
-    let raw_pubkey: Vec<u8> = hex::decode(pubkey).unwrap();
     let sig: Signature = Signature::from_slice(raw_signature.as_slice())
         .map_err(|e| anyhow!("invalid signature: {}", e))?;
-    let pubkey: secp256k1::XOnlyPublicKey =
-        secp256k1::XOnlyPublicKey::from_slice(raw_pubkey.as_slice())
-            .map_err(|e| anyhow!("invalid pubkey: {}", e))?;
+    let raw_pubkey: Vec<u8> = hex::decode(pubkey_str).unwrap();
+    let pubkey: XOnlyPublicKey = XOnlyPublicKey::from_slice(raw_pubkey.as_slice())
+        .map_err(|e| anyhow!("invalid pubkey: {}", e))?;
     sig.verify(&message, &pubkey).map_err(|e| {
         anyhow!(
             "invalid signature {} for pubkey {} {}",
@@ -268,9 +265,9 @@ impl Default for EventFilter {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 pub struct SignEvent {
     pub id: Uuid,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     pub signing_date: OffsetDateTime,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     pub observation_date: OffsetDateTime,
     pub status: EventStatus,
     pub nonce: Scalar,
@@ -355,9 +352,9 @@ impl<'a> TryFrom<&Row<'a>> for SignEvent {
 pub struct ActiveEvent {
     pub id: Uuid,
     pub locations: Vec<String>,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     pub signing_date: OffsetDateTime,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     pub observation_date: OffsetDateTime,
     pub status: EventStatus,
     pub total_allowed_entries: i64,
@@ -491,10 +488,10 @@ impl<'a> TryFrom<&Row<'a>> for ActiveEvent {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 pub struct EventSummary {
     pub id: Uuid,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     /// Time at which the attestation will be added to the event
     pub signing_date: OffsetDateTime,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     /// Date of when the weather observations occured
     pub observation_date: OffsetDateTime,
     /// NOAA observation stations used in this event
@@ -626,10 +623,10 @@ impl<'a> TryFrom<&Row<'a>> for EventSummary {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 pub struct Event {
     pub id: Uuid,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     /// Time at which the attestation will be added to the event
     pub signing_date: OffsetDateTime,
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     /// Date of when the weather observations occured
     pub observation_date: OffsetDateTime,
     /// NOAA observation stations used in this event
@@ -918,7 +915,7 @@ impl TryInto<Weather> for &OrderedMap<String, Value> {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 pub struct Observed {
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     pub date: OffsetDateTime,
     pub temp_low: i64,
     pub temp_high: i64,
@@ -1109,7 +1106,7 @@ impl ToRawSql for Observed {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 pub struct Forecasted {
-    #[serde(with = "utc_datetime")]
+    #[serde(with = "time::serde::rfc3339")]
     pub date: OffsetDateTime,
     pub temp_low: i64,
     pub temp_high: i64,

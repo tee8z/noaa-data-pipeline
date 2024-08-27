@@ -68,6 +68,7 @@ async fn can_get_event_run_etl_and_see_it_signed() {
         total_allowed_entries: 4,
         number_of_places_win: 1,
         number_of_values_per_entry: 6,
+        coordinator: None,
     };
     info!("above create event");
     let event = test_app.oracle.create_event(new_event_1).await.unwrap();
@@ -94,6 +95,7 @@ async fn can_get_event_run_etl_and_see_it_signed() {
                 wind_speed: Some(oracle::ValueOptions::Par),
             },
         ],
+        coordinator: None,
     };
     let entry_2 = AddEventEntry {
         id: Uuid::now_v7(),
@@ -118,6 +120,7 @@ async fn can_get_event_run_etl_and_see_it_signed() {
                 wind_speed: None,
             },
         ],
+        coordinator: None,
     };
     let entry_3 = AddEventEntry {
         id: Uuid::now_v7(),
@@ -142,6 +145,7 @@ async fn can_get_event_run_etl_and_see_it_signed() {
                 wind_speed: Some(oracle::ValueOptions::Under),
             },
         ],
+        coordinator: None,
     };
     let entry_4 = AddEventEntry {
         id: Uuid::now_v7(),
@@ -166,6 +170,7 @@ async fn can_get_event_run_etl_and_see_it_signed() {
                 wind_speed: Some(oracle::ValueOptions::Under),
             },
         ],
+        coordinator: None,
     };
     test_app
         .oracle
@@ -314,6 +319,7 @@ async fn can_get_event_run_etl_and_see_it_signed_multiple_winners() {
         total_allowed_entries: 4,
         number_of_places_win: 2,
         number_of_values_per_entry: 6,
+        coordinator: None,
     };
     info!("above create event");
     let event = test_app.oracle.create_event(new_event_1).await.unwrap();
@@ -340,6 +346,7 @@ async fn can_get_event_run_etl_and_see_it_signed_multiple_winners() {
                 wind_speed: Some(oracle::ValueOptions::Par),
             },
         ],
+        coordinator: None,
     };
     let entry_2 = AddEventEntry {
         id: Uuid::now_v7(),
@@ -364,6 +371,7 @@ async fn can_get_event_run_etl_and_see_it_signed_multiple_winners() {
                 wind_speed: None,
             },
         ],
+        coordinator: None,
     };
     let entry_3 = AddEventEntry {
         id: Uuid::now_v7(),
@@ -388,6 +396,7 @@ async fn can_get_event_run_etl_and_see_it_signed_multiple_winners() {
                 wind_speed: Some(oracle::ValueOptions::Under),
             },
         ],
+        coordinator: None,
     };
     let entry_4 = AddEventEntry {
         id: Uuid::now_v7(),
@@ -412,6 +421,7 @@ async fn can_get_event_run_etl_and_see_it_signed_multiple_winners() {
                 wind_speed: Some(oracle::ValueOptions::Under),
             },
         ],
+        coordinator: None,
     };
     test_app
         .oracle

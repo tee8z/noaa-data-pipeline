@@ -372,6 +372,10 @@ impl EventData {
             .collect();
 
         info!("insert values: {:?}", insert_values);
+        if insert_values.is_empty() {
+            debug!("entry values were emtpy, skipping creating entry");
+            return Ok(());
+        }
 
         let conn = self.new_write_connection_retry().await?;
         let mut weather_stmt = conn.prepare(&query_str)?;

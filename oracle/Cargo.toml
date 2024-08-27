@@ -24,6 +24,7 @@ nostr = "0.33.0"
 duckdb = { version = "1.0.0" }
 fern = { version = "0.6.2", features = ["colored"] }
 futures = "0.3.28"
+hex = "0.4.3"
 hyper = "1.4.0"
 h2 = "0.4.5"
 itertools = "0.13.0"

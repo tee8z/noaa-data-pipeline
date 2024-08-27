@@ -1,7 +1,8 @@
 use crate::{
-    weather_data, ActiveEvent, AddEventEntry, CreateEvent, CreateEventData, Event, EventData,
-    EventFilter, EventStatus, EventSummary, Forecast, ForecastRequest, Observation,
-    ObservationRequest, SignEvent, ValueOptions, Weather, WeatherData, WeatherEntry,
+    validate, weather_data, ActiveEvent, AddEventEntry, AddEventEntryMessage, CreateEvent,
+    CreateEventData, CreateEventMessage, Event, EventData, EventFilter, EventStatus, EventSummary,
+    Forecast, ForecastRequest, Observation, ObservationRequest, SignEvent, ValueOptions, Weather,
+    WeatherData, WeatherEntry,
 };
 use anyhow::anyhow;
 use base64::{engine::general_purpose, Engine};
@@ -52,6 +53,8 @@ pub enum Error {
     WeatherData(#[from] weather_data::Error),
     #[error("Failed to find winning outcome: {0}")]
     OutcomeNotFound(String),
+    #[error("Failed to validate message: {0}")]
+    Validation(#[from] serde_json::Error),
 }
 
 pub struct Oracle {
@@ -148,17 +151,16 @@ impl Oracle {
     }
 
     pub async fn create_event(&self, event: CreateEvent) -> Result<Event, Error> {
-        let oracle_event = CreateEventData::new(
-            self,
-            event.id,
-            event.observation_date,
-            event.signing_date,
-            event.locations,
-            event.total_allowed_entries,
-            event.number_of_places_win,
-            event.number_of_values_per_entry,
-        )
-        .map_err(Error::BadEvent)?;
+        if let Some(coordinator) = event.coordinator.clone() {
+            let messages: CreateEventMessage = event.clone().into();
+            validate(
+                messages.message()?,
+                &coordinator.pubkey,
+                &coordinator.signature,
+            )?;
+        }
+        let oracle_event =
+            CreateEventData::new(self.raw_public_key(), event).map_err(Error::BadEvent)?;
         self.event_data
             .add_event(oracle_event)
             .await
@@ -166,12 +168,19 @@ impl Oracle {
     }
 
     pub async fn add_event_entry(&self, entry: AddEventEntry) -> Result<WeatherEntry, Error> {
-        //TODO: use the builder pattern on WeatherEntry and add the validation there
         if entry.id.get_version_num() != 7 {
             return Err(Error::BadEntry(format!(
                 "Client needs to provide a valid Uuidv7 for entry id {}",
                 entry.id
             )));
+        }
+        if let Some(coordinator) = entry.coordinator.clone() {
+            let messages: AddEventEntryMessage = entry.clone().into();
+            validate(
+                messages.message()?,
+                &coordinator.pubkey,
+                &coordinator.signature,
+            )?;
         }
         let event = match self.event_data.get_event(&entry.event_id).await {
             Ok(event_data) => Ok(event_data),

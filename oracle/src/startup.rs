@@ -15,7 +15,10 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use hyper::{Method, header::{ACCEPT, CONTENT_TYPE}};
+use hyper::{
+    header::{ACCEPT, CONTENT_TYPE},
+    Method,
+};
 use log::info;
 use std::sync::Arc;
 use tower_http::{
@@ -56,10 +59,10 @@ pub struct AppState {
         schemas(
                 routes::files::get_names::Files,
                 oracle::Error,
-                db::event_data::Event,
-                db::event_data::WeatherEntry,
-                db::event_data::AddEventEntry,
-                db::event_data::CreateEvent,
+                db::Event,
+                db::WeatherEntry,
+                db::AddEventEntry,
+                db::CreateEvent,
                 routes::events::oracle_routes::Pubkey,
                 routes::events::oracle_routes::Base64Pubkey
             )
@@ -104,7 +107,7 @@ pub fn app(app_state: AppState) -> Router {
     let cors = CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-        .allow_headers([ACCEPT,CONTENT_TYPE])
+        .allow_headers([ACCEPT, CONTENT_TYPE])
         // allow requests from any origin
         .allow_origin(Any);
     Router::new()

@@ -31,8 +31,8 @@ use uuid::Uuid;
 pub enum Error {
     #[error("{0}")]
     NotFound(String),
-    #[error("Failed to get private key: {0}")]
-    PrivateKey(#[from] anyhow::Error),
+    #[error("Failed to get key: {0}")]
+    ValidateKey(#[from] anyhow::Error),
     #[error("Must have at least one outcome: {0}")]
     MinOutcome(String),
     #[error("Event maturity epoch must be in the future: {0}")]
@@ -152,9 +152,10 @@ impl Oracle {
 
     pub async fn create_event(&self, event: CreateEvent) -> Result<Event, Error> {
         if let Some(coordinator) = event.coordinator.clone() {
-            let messages: CreateEventMessage = event.clone().into();
+            let message: CreateEventMessage = event.clone().into();
+            info!("create event: {:?}", message);
             validate(
-                messages.message()?,
+                message.message()?,
                 &coordinator.pubkey,
                 &coordinator.signature,
             )?;

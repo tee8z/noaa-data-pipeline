@@ -11,12 +11,12 @@ use dlctix::{
     musig2::secp256k1::{rand, PublicKey, SecretKey},
     secp::Point,
 };
-use itertools::Itertools;
 use log::{debug, error, info, warn};
 use nostr::{key::Keys, nips::nip19::ToBech32};
 use pem_rfc7468::{decode_vec, encode_string};
 use std::{
     cmp,
+    collections::BTreeMap,
     fs::{metadata, File},
     io::{Read, Write},
     path::Path,
@@ -511,20 +511,21 @@ impl Oracle {
         info!("events: {:?}", events);
         for event in events.iter_mut() {
             let mut entries = self.event_data.get_event_weather_entries(&event.id).await?;
+            let mut entry_indexies = entries.clone();
+            // very important, the sort index of the entry should always be the same when getting the outcome
+            entry_indexies.sort_by_key(|entry| entry.id);
+
             entries.sort_by_key(|entry| cmp::Reverse(entry.score));
-            // NOTE: there may be issues here if number of unique scores isn't as large as number_of_places_win
-            let winners: Vec<i64> = entries
+            let winning_scores: Vec<i64> = entries
                 .iter()
-                .map(|entry| entry.score.unwrap_or_default()) // default means '0' was winning score
-                .unique()
                 .take(event.number_of_places_win as usize)
+                .map(|entry| entry.score.unwrap_or_default()) // default means '0' was winning score
                 .collect();
 
-            let winner_bytes: Vec<u8> = winners
-                .clone()
-                .into_iter()
-                .flat_map(|num| num.to_be_bytes())
-                .collect();
+            let winners: BTreeMap<usize, Vec<usize>> =
+                get_winners(entry_indexies.clone(), winning_scores);
+
+            let winner_bytes: Vec<u8> = get_winning_bytes(winners.clone());
 
             if event.signing_date < OffsetDateTime::now_utc() {
                 let outcome_index = event
@@ -535,7 +536,15 @@ impl Oracle {
 
                 let winners_str = winners
                     .iter()
-                    .map(|uuid| uuid.to_string())
+                    .map(|(score, winning_entry_indexies)| {
+                        let entries: String = winning_entry_indexies
+                            .iter()
+                            .filter_map(|entry_index| entry_indexies.get(entry_index.clone()))
+                            .map(|entry| entry.id.to_string())
+                            .collect::<Vec<String>>()
+                            .join(",");
+                        format!("({}, {})", score, entries)
+                    })
                     .collect::<Vec<String>>()
                     .join(",");
 
@@ -544,15 +553,12 @@ impl Oracle {
                     error!("final result doesn't match any of the possible outcomes: event_id {} winners {} expiry {:?}", event.id, winners_str, event.event_annoucement.expiry);
 
                     return Err(Error::OutcomeNotFound(format!(
-                        "event_id {} outcome winning scores {} expiry {:?}",
+                        "event_id {} outcome winners {} expiry {:?}",
                         event.id, winners_str, event.event_annoucement.expiry
                     )));
                 };
 
-                info!(
-                    "winners: event_id {} winning scores {}",
-                    event.id, winners_str
-                );
+                info!("winners: event_id {} winners {}", event.id, winners_str);
 
                 event.attestation = event.event_annoucement.attestation_secret(
                     index,
@@ -600,6 +606,41 @@ impl Oracle {
             .await
             .map_err(Error::WeatherData)
     }
+}
+
+pub fn get_winners(
+    entry_indexies: Vec<WeatherEntry>,
+    winning_scores: Vec<i64>,
+) -> BTreeMap<usize, Vec<usize>> {
+    let mut winners: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for score in winning_scores.clone() {
+        winners.insert(score as usize, vec![]);
+    }
+    let entry_indexies_iter = entry_indexies.iter();
+    for (entry_index, entry) in entry_indexies_iter.enumerate() {
+        let Some(score) = entry.score else { continue };
+        if winning_scores.contains(&score) {
+            let Some(rank_winners) = winners.get_mut(&(score as usize)) else {
+                continue;
+            };
+            rank_winners.push(entry_index);
+        }
+    }
+
+    winners
+}
+
+pub fn get_winning_bytes(winners: BTreeMap<usize, Vec<usize>>) -> Vec<u8> {
+    winners
+        .clone()
+        .into_iter()
+        .flat_map(|(_, values)| {
+            values
+                .iter()
+                .flat_map(|val| val.to_be_bytes())
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 async fn add_only_forecast_data(

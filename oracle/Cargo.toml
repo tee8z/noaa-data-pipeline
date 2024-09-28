@@ -66,4 +66,5 @@ uuid = { version = "1.4.1", features = ["v7", "serde"] }
 
 [dev-dependencies]
 tower = "0.4.13"
+maplit = "1.0.2"
 mockall = "0.13.0"

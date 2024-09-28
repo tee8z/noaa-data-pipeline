@@ -8,6 +8,7 @@ use axum::{
 use hyper::{header, Method};
 use log::info;
 use oracle::{
+    oracle::{get_winners, get_winning_bytes},
     AddEventEntry, CreateEvent, Event, EventStatus, Forecast, Observation, WeatherChoices,
 };
 use serde_json::from_slice;
@@ -504,7 +505,7 @@ async fn can_get_event_run_etl_and_see_it_signed_multiple_winners() {
     assert_eq!(res.status, EventStatus::Signed);
     assert!(res.attestation.is_some());
 
-    let mut entries = res.entries;
+    let mut entries = res.entries.clone();
     entries.sort_by_key(|entry| cmp::Reverse(entry.score));
     info!("entries: {:?}", entries);
     //Make sure the expected entries won and calculated the correct score for each
@@ -518,10 +519,12 @@ async fn can_get_event_run_etl_and_see_it_signed_multiple_winners() {
     let entry_4_res = entries.iter().find(|entry| entry.id == entry_4.id).unwrap();
     assert_eq!(entry_4_res.score.unwrap(), 1);
 
-    let winning_score_bytes: Vec<u8> = vec![4, 3]
-        .into_iter()
-        .flat_map(|val: i64| val.to_be_bytes())
-        .collect();
+    let mut entry_indexies = res.entries.clone();
+    entry_indexies.sort_by_key(|entry| entry.id);
+
+    let winners = get_winners(entry_indexies, vec![4_i64]);
+    let mut winning_score_bytes = get_winning_bytes(winners.clone());
+    winning_score_bytes.reverse();
 
     let outcome_index = event
         .event_annoucement

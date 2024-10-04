@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use itertools::Itertools;
 use log::info;
 
+/*
 pub fn generate_outcome_matrix(
     number_of_values_per_entry: usize,
     number_of_places_win: usize,
@@ -45,78 +46,89 @@ fn generate_possible_outcome_rankings(
     }
     outcome_rankings
 }
+*/
 
-fn generate_matrix(
-    number_of_places_win: usize,
-    rankings: Vec<Vec<usize>>,
-    total_allowed_entries: usize,
-) -> Vec<BTreeMap<usize, Vec<usize>>> {
-    let mut entry_indices: Vec<usize> = (0..total_allowed_entries).collect();
-    entry_indices.reverse();
-    let possible_indices: Vec<Vec<usize>> = generate_all_combinations(entry_indices.clone());
-    println!("index_list {:?}", possible_indices);
-    let mut possible_outcomes: Vec<BTreeMap<usize, Vec<usize>>> = Vec::new();
-    for (ranking, indices) in rankings.iter().zip(possible_indices.iter()) {
-        let mut current_map = BTreeMap::new();
-        let mut used_indices = HashSet::new();
-
-        // Process each rank and corresponding indices
-        for rank in ranking {
-            let mut valid_indices = Vec::new();
-
-            // Add valid indices that are not yet used
-            for index in indices.clone() {
-                if !used_indices.contains(&index) {
-                    valid_indices.push(index);
-                    used_indices.insert(index);
-                }
-            }
-
-            // Insert into the BTreeMap if valid indices exist
-            if !valid_indices.is_empty() {
-                current_map.insert(rank.clone(), valid_indices.clone());
-            }
+// Function to generate all partitions (rankings) for k players, considering ties
+fn generate_rankings_with_ties(num_ranks: usize, max_rank: usize) -> Vec<Vec<usize>> {
+    fn backtrack(
+        start: usize,
+        remaining: usize,
+        current: &mut Vec<usize>,
+        result: &mut Vec<Vec<usize>>,
+        max_rank: usize,
+    ) {
+        if remaining == 0 {
+            result.push(current.clone());
+            return;
         }
-
-        possible_outcomes.push(current_map);
+        for i in start..=max_rank {
+            current.push(i);
+            backtrack(i, remaining - 1, current, result, max_rank);
+            current.pop();
+        }
     }
 
-    possible_outcomes
-    /*
-    let number_of_indice_permuations = possible_indices.len();
-
-    for (item_index, entry_index_list) in possible_indices.iter().enumerate() {
-        if entry_index_list.is_empty() {
-            continue;
-        }
-
-        // Pair each ranking with the current index list
-        cur_index_options = Some(entry_index_list.clone());
-
-        for ranking in &rankings {
-            let mut map = BTreeMap::new();
-            for rank in ranking {
-
-                //spread out index
-            }
-            // Skip 0 score until the last permuation of indicies
-            if ranking.len() == 1
-                && ranking[0] == 0
-                && item_index != (number_of_indice_permuations - 1)
-            {
-                continue;
-            }
-            // Use the current ranking and index list
-            map.insert(ranking[0], entry_index_list.clone());
-            possible_outcomes.push(map);
-        }
-        prev_index_options = cur_index_options;
-    }
-
-    possible_outcomes
-    */
+    let mut result = Vec::new();
+    let mut current = Vec::new();
+    backtrack(1, num_ranks, &mut current, &mut result, max_rank);
+    result
 }
 
+// Function to generate all combinations of k players from n players
+fn combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
+    fn combine_helper(
+        n: usize,
+        k: usize,
+        start: usize,
+        current: &mut Vec<usize>,
+        result: &mut Vec<Vec<usize>>,
+    ) {
+        if current.len() == k {
+            result.push(current.clone());
+            return;
+        }
+        for i in start..n {
+            current.push(i);
+            combine_helper(n, k, i + 1, current, result);
+            current.pop();
+        }
+    }
+
+    let mut result = Vec::new();
+    let mut current = Vec::new();
+    combine_helper(n, k, 0, &mut current, &mut result);
+    result
+}
+
+// Main function to generate the BTreeMap<Vec<usize>> for ranked players
+pub fn generate_ranked_players(
+    total_allowed_entries: usize,
+    number_of_places_win: usize,
+    max_rank: usize,
+) -> Vec<BTreeMap<usize, Vec<usize>>> {
+    let mut results = Vec::new();
+
+    // Step 1: Generate all combinations of number_of_places_win from total_allowed_entries
+    let player_combinations = combinations(total_allowed_entries, number_of_places_win);
+
+    // Step 2: Generate all possible rankings with ties fo number_of_places_win
+    let ranking_combinations = generate_rankings_with_ties(number_of_places_win, max_rank);
+
+    // Step 3: For each combination of players and each ranking, assign players to ranks
+    for players in player_combinations {
+        for ranking in &ranking_combinations {
+            let mut rank_map: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+            for (i, &rank) in ranking.iter().enumerate() {
+                rank_map.entry(rank).or_default().push(players[i]);
+            }
+            results.push(rank_map);
+        }
+    }
+
+    results
+}
+
+/*
 fn generate_all_combinations(elements: Vec<usize>) -> Vec<Vec<usize>> {
     let mut all_combinations = Vec::new();
     let n = elements.len();
@@ -136,7 +148,8 @@ fn generate_all_combinations(elements: Vec<usize>) -> Vec<Vec<usize>> {
 
     all_combinations
 }
-
+*/
+/*
 fn combinations<T: Clone>(elements: &[T], n: usize) -> Vec<Vec<T>> {
     if n == 0 {
         return vec![vec![]]; // Base case: only the empty combination
@@ -163,7 +176,7 @@ fn combinations<T: Clone>(elements: &[T], n: usize) -> Vec<Vec<T>> {
     result.extend(without_head);
 
     result
-}
+}*/
 
 pub fn generate_outcome_messages(
     possible_user_outcomes: Vec<BTreeMap<usize, Vec<usize>>>,
@@ -190,7 +203,7 @@ mod test {
 
     use maplit::btreemap;
 
-    use super::{generate_matrix, generate_possible_outcome_rankings};
+    use super::generate_ranked_players;
 
     #[test]
     fn can_generate_matrix_one_winning_rank() {
@@ -265,9 +278,10 @@ mod test {
 
         let total_allowed_entries = 3;
         let number_of_places_win = 1;
-        let rankings = generate_possible_outcome_rankings(number_of_places_win, vec![0, 1, 2, 3]);
-        println!("rankings {:?}", rankings);
-        let matrix = generate_matrix(number_of_places_win, rankings, total_allowed_entries);
+        let max_ranking = 3;
+
+        let matrix =
+            generate_ranked_players(number_of_places_win, total_allowed_entries, max_ranking);
         let mut matrix_iter = matrix.iter();
         println!("matrix {:?}", matrix);
         for outcome in expected {
@@ -277,44 +291,6 @@ mod test {
             assert_ne!(result, None);
             assert_eq!(*(result.unwrap()), outcome);
         }
-    }
-
-    #[test]
-    fn can_generate_possible_outcome_rankings_three_winners() {
-        let expect_possible_outcome_rankings = [
-            vec![0],
-            vec![1],
-            vec![2],
-            vec![3],
-            vec![0, 1],
-            vec![0, 2],
-            vec![0, 3],
-            vec![1, 2],
-            vec![1, 3],
-            vec![2, 3],
-            vec![0, 1, 2],
-            vec![0, 1, 3],
-            vec![0, 2, 3],
-            vec![1, 2, 3],
-        ];
-        let number_of_places_win = 3;
-        let possible_score = vec![0, 1, 2, 3];
-        let rankings = generate_possible_outcome_rankings(number_of_places_win, possible_score);
-        println!("expected_rankings {:?}", expect_possible_outcome_rankings);
-        println!("rankings {:?}", rankings);
-        assert_eq!(
-            to_sorted_set(rankings),
-            to_sorted_set(expect_possible_outcome_rankings.to_vec())
-        );
-    }
-
-    fn to_sorted_set(vec: Vec<Vec<usize>>) -> HashSet<Vec<usize>> {
-        vec.into_iter()
-            .map(|mut v| {
-                v.sort();
-                v
-            })
-            .collect()
     }
 
     #[test]
@@ -881,10 +857,9 @@ mod test {
         ];
         let total_allowed_entries = 4;
         let number_of_places_win = 3;
-        let possible_score = vec![0, 1, 2, 3];
-        let rankings = generate_possible_outcome_rankings(number_of_places_win, possible_score);
-        println!("rankings {:?}", rankings);
-        let matrix = generate_matrix(number_of_places_win, rankings, total_allowed_entries);
+        let max_ranking = 3;
+        let matrix =
+            generate_ranked_players(number_of_places_win, total_allowed_entries, max_ranking);
         let mut matrix_iter = matrix.iter();
         println!("matrix {:?}", matrix);
         for outcome in expected_matrix {

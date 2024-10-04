@@ -139,10 +139,10 @@ impl CreateEventData {
             ));
         }
 
-        let possible_user_outcomes: Vec<BTreeMap<usize, Vec<usize>>> = generate_outcome_matrix(
-            event.number_of_values_per_entry,
-            event.number_of_places_win,
+        let possible_user_outcomes: Vec<BTreeMap<usize, Vec<usize>>> = generate_ranked_players(
             event.total_allowed_entries,
+            event.number_of_places_win,
+            event.number_of_values_per_entry,
         );
         info!("user outcomes: {:?}", possible_user_outcomes);
 

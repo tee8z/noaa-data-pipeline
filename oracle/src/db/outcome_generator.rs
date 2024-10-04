@@ -1,182 +1,54 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use itertools::Itertools;
 use log::info;
 
-/*
-pub fn generate_outcome_matrix(
-    number_of_values_per_entry: usize,
-    number_of_places_win: usize,
-    total_allowed_entries: usize,
-) -> Vec<BTreeMap<usize, Vec<usize>>> {
-    // number_of_values_per_entry * 2 == max value
-    let max_number_of_points_per_value_in_entry = 2;
-
-    let possible_scores: Vec<usize> =
-        (0..=(number_of_values_per_entry * max_number_of_points_per_value_in_entry)).collect();
-
-    // allows us to have comps where say the top 3 scores split the pot
-    let possible_outcome_rankings: Vec<Vec<usize>> =
-        generate_possible_outcome_rankings(number_of_places_win, possible_scores);
-    info!("possible ranking outcomes: {:?}", possible_outcome_rankings);
-
-    generate_matrix(
-        number_of_places_win,
-        possible_outcome_rankings,
-        total_allowed_entries,
-    )
-}
-
-fn generate_possible_outcome_rankings(
-    number_of_places_win: usize,
-    mut possible_scores: Vec<usize>,
-) -> Vec<Vec<usize>> {
-    possible_scores.sort();
-    possible_scores.reverse();
-    let mut outcome_rankings = vec![];
-    for length in 1..=possible_scores.len() {
-        if length > number_of_places_win {
-            break;
-        }
-
-        // For each possible length of subsets, iterate through combinations
-        for subset in possible_scores.iter().copied().combinations(length) {
-            outcome_rankings.push(subset);
-        }
-    }
-    outcome_rankings
-}
-*/
-
-// Function to generate all partitions (rankings) for k players, considering ties
-fn generate_rankings_with_ties(num_ranks: usize, max_rank: usize) -> Vec<Vec<usize>> {
-    fn backtrack(
-        start: usize,
-        remaining: usize,
-        current: &mut Vec<usize>,
-        result: &mut Vec<Vec<usize>>,
-        max_rank: usize,
-    ) {
-        if remaining == 0 {
-            result.push(current.clone());
-            return;
-        }
-        for i in start..=max_rank {
-            current.push(i);
-            backtrack(i, remaining - 1, current, result, max_rank);
-            current.pop();
-        }
-    }
-
-    let mut result = Vec::new();
-    let mut current = Vec::new();
-    backtrack(1, num_ranks, &mut current, &mut result, max_rank);
-    result
-}
-
-// Function to generate all combinations of k players from n players
-fn combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
-    fn combine_helper(
-        n: usize,
-        k: usize,
-        start: usize,
-        current: &mut Vec<usize>,
-        result: &mut Vec<Vec<usize>>,
-    ) {
-        if current.len() == k {
-            result.push(current.clone());
-            return;
-        }
-        for i in start..n {
-            current.push(i);
-            combine_helper(n, k, i + 1, current, result);
-            current.pop();
-        }
-    }
-
-    let mut result = Vec::new();
-    let mut current = Vec::new();
-    combine_helper(n, k, 0, &mut current, &mut result);
-    result
-}
-
-// Main function to generate the BTreeMap<Vec<usize>> for ranked players
 pub fn generate_ranked_players(
-    total_allowed_entries: usize,
     number_of_places_win: usize,
-    max_rank: usize,
+    total_allowed_entries: usize,
 ) -> Vec<BTreeMap<usize, Vec<usize>>> {
-    let mut results = Vec::new();
+    // add another place to generate the "unranked" values
+    let matrix = generate_partitions(total_allowed_entries, number_of_places_win + 1);
+    println!("matrix: {:?}", matrix);
+    let mut permutations = vec![];
 
-    // Step 1: Generate all combinations of number_of_places_win from total_allowed_entries
-    let player_combinations = combinations(total_allowed_entries, number_of_places_win);
+    for permutation in matrix {
+        let mut game_results = BTreeMap::new();
 
-    // Step 2: Generate all possible rankings with ties fo number_of_places_win
-    let ranking_combinations = generate_rankings_with_ties(number_of_places_win, max_rank);
-
-    // Step 3: For each combination of players and each ranking, assign players to ranks
-    for players in player_combinations {
-        for ranking in &ranking_combinations {
-            let mut rank_map: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-            for (i, &rank) in ranking.iter().enumerate() {
-                rank_map.entry(rank).or_default().push(players[i]);
-            }
-            results.push(rank_map);
-        }
-    }
-
-    results
-}
-
-/*
-fn generate_all_combinations(elements: Vec<usize>) -> Vec<Vec<usize>> {
-    let mut all_combinations = Vec::new();
-    let n = elements.len();
-
-    for size in 0..=n {
-        let permutations = combinations(&elements, size);
-        if permutations.len() == 0 {
+        //can never have first place be empty with later ranks having a value
+        if permutation[0].len() == 0 {
             continue;
         }
-        if permutations.len() == 1 {
-            if permutations[0].len() == 0 {
-                continue;
-            }
+        for (rank, player_indexies) in permutation.iter().enumerate() {
+            game_results.insert(rank + 1, player_indexies.clone());
         }
-        all_combinations.extend(permutations);
+        permutations.push(game_results);
     }
-
-    all_combinations
+    permutations
 }
-*/
-/*
-fn combinations<T: Clone>(elements: &[T], n: usize) -> Vec<Vec<T>> {
-    if n == 0 {
-        return vec![vec![]]; // Base case: only the empty combination
+
+fn generate_partitions(n: usize, k: usize) -> Vec<Vec<Vec<usize>>> {
+    let mut partitions = Vec::new();
+
+    // Generate all partitions of `n` players into up to `k` groups
+    for num_groups in 1..=k {
+        // Generate all ways to partition the players into exactly `num_groups` groups
+        let partition_iter = (0..n).combinations(num_groups - 1);
+        for breaks in partition_iter {
+            let mut partition = vec![Vec::new(); num_groups];
+            let mut current_group = 0;
+            for player in 0..n {
+                if breaks.contains(&player) {
+                    current_group += 1;
+                }
+                partition[current_group].push(player);
+            }
+            partitions.push(partition);
+        }
     }
 
-    if elements.is_empty() {
-        return vec![]; // No combinations can be formed
-    }
-
-    let head = &elements[0];
-    let tail = &elements[1..];
-
-    // Combine head with combinations from the tail
-    let mut with_head = combinations(tail, n - 1);
-    for combo in &mut with_head {
-        combo.push(head.clone());
-    }
-
-    // Combine without head
-    let without_head = combinations(tail, n);
-
-    // Combine results
-    let mut result = with_head;
-    result.extend(without_head);
-
-    result
-}*/
+    partitions
+}
 
 pub fn generate_outcome_messages(
     possible_user_outcomes: Vec<BTreeMap<usize, Vec<usize>>>,
@@ -203,7 +75,20 @@ mod test {
 
     use maplit::btreemap;
 
-    use super::generate_ranked_players;
+    use crate::generate_ranked_players;
+
+    use super::generate_partitions;
+
+    #[test]
+    fn can_generate_matrix_permutations() {
+        let total_allowed_entries = 3; // Number of players
+        let number_of_places_win = 2; // We are only capturing the top 3 rankings
+        let matrix = generate_partitions(total_allowed_entries, number_of_places_win);
+        println!("matrix: {:?}", matrix);
+        let ranked = generate_ranked_players(number_of_places_win, total_allowed_entries);
+        println!("ranked: {:?}", ranked);
+        assert_eq!(matrix.is_empty(), false);
+    }
 
     #[test]
     fn can_generate_matrix_one_winning_rank() {
@@ -278,10 +163,8 @@ mod test {
 
         let total_allowed_entries = 3;
         let number_of_places_win = 1;
-        let max_ranking = 3;
 
-        let matrix =
-            generate_ranked_players(number_of_places_win, total_allowed_entries, max_ranking);
+        let matrix = generate_ranked_players(number_of_places_win, total_allowed_entries);
         let mut matrix_iter = matrix.iter();
         println!("matrix {:?}", matrix);
         for outcome in expected {
@@ -857,9 +740,7 @@ mod test {
         ];
         let total_allowed_entries = 4;
         let number_of_places_win = 3;
-        let max_ranking = 3;
-        let matrix =
-            generate_ranked_players(number_of_places_win, total_allowed_entries, max_ranking);
+        let matrix = generate_ranked_players(number_of_places_win, total_allowed_entries);
         let mut matrix_iter = matrix.iter();
         println!("matrix {:?}", matrix);
         for outcome in expected_matrix {

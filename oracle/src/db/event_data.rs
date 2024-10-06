@@ -351,15 +351,15 @@ impl EventData {
             .flat_map(|(a, b, c, d, e)| {
                 let temp_low = match c {
                     Some(c) => Value::Text(c.to_string()),
-                    None => Value::Null,
+                    _ => Value::Null,
                 };
                 let temp_high = match d {
                     Some(d) => Value::Text(d.to_string()),
-                    None => Value::Null,
+                    _ => Value::Null,
                 };
                 let wind_speed = match e {
                     Some(e) => Value::Text(e.to_string()),
-                    None => Value::Null,
+                    _ => Value::Null,
                 };
                 vec![
                     Value::Text(a.to_string()),

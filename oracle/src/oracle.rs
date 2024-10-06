@@ -11,7 +11,6 @@ use dlctix::{
     musig2::secp256k1::{rand, PublicKey, SecretKey},
     secp::Point,
 };
-use itertools::Itertools;
 use log::{debug, error, info, warn};
 use nostr::{key::Keys, nips::nip19::ToBech32};
 use pem_rfc7468::{decode_vec, encode_string};
@@ -151,6 +150,17 @@ impl Oracle {
     }
 
     pub async fn create_event(&self, event: CreateEvent) -> Result<Event, Error> {
+        if event.id.get_version_num() != 7 {
+            return Err(Error::BadEvent(anyhow!(
+                "event needs to provide a valid Uuidv7 for event id {}",
+                event.id
+            )));
+        }
+        if event.total_allowed_entries > 25 {
+            return Err(Error::BadEvent(anyhow!(
+                "Max number of allowed entries the oracle can watch is 25"
+            )));
+        }
         if let Some(coordinator) = event.coordinator.clone() {
             let message: CreateEventMessage = event.clone().into();
             info!("create event: {:?}", message);
@@ -511,48 +521,48 @@ impl Oracle {
         info!("events: {:?}", events);
         for event in events.iter_mut() {
             let mut entries = self.event_data.get_event_weather_entries(&event.id).await?;
-            entries.sort_by_key(|entry| cmp::Reverse(entry.score));
-            // NOTE: there may be issues here if number of unique scores isn't as large as number_of_places_win
-            let winners: Vec<i64> = entries
-                .iter()
-                .map(|entry| entry.score.unwrap_or_default()) // default means '0' was winning score
-                .unique()
-                .take(event.number_of_places_win as usize)
-                .collect();
+            let mut entry_indexies = entries.clone();
+            // very important, the sort index of the entry should always be the same when getting the outcome
+            entry_indexies.sort_by_key(|entry| entry.id);
 
-            let winner_bytes: Vec<u8> = winners
-                .clone()
-                .into_iter()
-                .flat_map(|num| num.to_be_bytes())
-                .collect();
+            entries.sort_by_key(|entry| cmp::Reverse(entry.score));
+            // we have set the number_of_places_win to 1 always (ranking can't be done in large groups efficiently at the moment)
+            let winning_score: i64 = entries[1].score.unwrap_or_default(); // default means '0' was winning score;
+
+            let winners: Vec<usize> = get_winners(entry_indexies.clone(), winning_score);
+
+            let winner_bytes: Vec<u8> = get_winning_bytes(winners.clone());
 
             if event.signing_date < OffsetDateTime::now_utc() {
+                info!(
+                    "outcome_messages: {:?}",
+                    event.event_annoucement.outcome_messages
+                );
+                info!("winner_bytes: {:?}", winner_bytes);
                 let outcome_index = event
                     .event_annoucement
                     .outcome_messages
                     .iter()
                     .position(|outcome| *outcome == winner_bytes);
-
-                let winners_str = winners
+                let winning_entries = winners
                     .iter()
-                    .map(|uuid| uuid.to_string())
+                    .filter_map(|entry_index| entry_indexies.get(*entry_index))
+                    .map(|entry| entry.id.to_string())
                     .collect::<Vec<String>>()
                     .join(",");
+                let winners_str = format!("({}, {})", winning_score, winning_entries);
 
                 let Some(index) = outcome_index else {
                     // Something went horribly wrong, use the info from this log line to track refunding users based on DLC expiry (we set to 1 week)
                     error!("final result doesn't match any of the possible outcomes: event_id {} winners {} expiry {:?}", event.id, winners_str, event.event_annoucement.expiry);
 
                     return Err(Error::OutcomeNotFound(format!(
-                        "event_id {} outcome winning scores {} expiry {:?}",
+                        "event_id {} outcome winners {} expiry {:?}",
                         event.id, winners_str, event.event_annoucement.expiry
                     )));
                 };
 
-                info!(
-                    "winners: event_id {} winning scores {}",
-                    event.id, winners_str
-                );
+                info!("winners: event_id {} winners {}", event.id, winners_str);
 
                 event.attestation = event.event_annoucement.attestation_secret(
                     index,
@@ -600,6 +610,28 @@ impl Oracle {
             .await
             .map_err(Error::WeatherData)
     }
+}
+
+pub fn get_winners(entry_indexies: Vec<WeatherEntry>, winning_score: i64) -> Vec<usize> {
+    let mut winners: Vec<usize> = Vec::new();
+    let entry_indexies_iter = entry_indexies.iter();
+    for (entry_index, entry) in entry_indexies_iter.enumerate() {
+        let Some(score) = entry.score else { continue };
+        if winning_score == score {
+            winners.push(entry_index);
+        }
+    }
+
+    winners.sort();
+
+    winners
+}
+
+pub fn get_winning_bytes(winners: Vec<usize>) -> Vec<u8> {
+    winners
+        .into_iter()
+        .flat_map(|num| num.to_be_bytes())
+        .collect::<Vec<u8>>()
 }
 
 async fn add_only_forecast_data(

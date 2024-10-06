@@ -7,7 +7,6 @@ use dlctix::EventAnnouncement;
 use duckdb::arrow::datatypes::ToByteSlice;
 use duckdb::types::{OrderedMap, ToSqlOutput, Type, Value};
 use duckdb::{ffi, ErrorCode, Row, ToSql};
-use itertools::Itertools;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
@@ -18,9 +17,12 @@ use uuid::Uuid;
 
 pub mod event_data;
 pub mod event_db_migrations;
+pub mod outcome_generator;
 pub mod weather_data;
+
 pub use event_data::*;
 pub use event_db_migrations::*;
+pub use outcome_generator::*;
 pub use weather_data::{Forecast, Observation, Station, WeatherData};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -39,8 +41,6 @@ pub struct CreateEvent {
     pub number_of_values_per_entry: usize,
     /// Total number of allowed entries into the event
     pub total_allowed_entries: usize,
-    /// Total amount of places that are part of the winnings split
-    pub number_of_places_win: usize,
     /// Add a coordinator that will use the event entries in a competition
     pub coordinator: Option<CoordinatorInfo>,
 }
@@ -53,7 +53,7 @@ pub struct CreateEventMessage {
     /// Time at which the attestation will be added to the event, needs to be after the observation date
     pub signing_date: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
-    /// Date of when the weather observations occured (midnight UTC), all entries must be made before this time
+    /// Date of when the weather observations occurred (midnight UTC), all entries must be made before this time
     pub observation_date: OffsetDateTime,
     /// NOAA observation stations used in this event
     pub locations: Vec<String>,
@@ -61,8 +61,6 @@ pub struct CreateEventMessage {
     pub number_of_values_per_entry: usize,
     /// Total number of allowed entries into the event
     pub total_allowed_entries: usize,
-    /// Total amount of places that are part of the winnings split
-    pub number_of_places_win: usize,
 }
 
 impl CreateEventMessage {
@@ -82,7 +80,6 @@ impl From<CreateEvent> for CreateEventMessage {
             locations: value.locations,
             number_of_values_per_entry: value.number_of_values_per_entry,
             total_allowed_entries: value.total_allowed_entries,
-            number_of_places_win: value.number_of_places_win,
         }
     }
 }
@@ -134,41 +131,11 @@ impl CreateEventData {
                 event.observation_date.format(&Rfc3339).unwrap()
             ));
         }
+        let possible_user_outcomes: Vec<Vec<usize>> =
+            generate_winner_permutations(event.total_allowed_entries);
+        info!("user outcomes: {:?}", possible_user_outcomes);
 
-        // number_of_values_per_entry * 2 == max value, create array from max value to 0
-        // determine all possible messages that we might sign
-        let max_number_of_points_per_value_in_entry = 2;
-        let possible_scores: Vec<i64> = (0..=(event.number_of_values_per_entry
-            * max_number_of_points_per_value_in_entry))
-            .map(|val| val as i64)
-            .collect();
-
-        // allows us to have comps where say the top 3 scores split the pot
-        let possible_outcome_rankings: Vec<Vec<i64>> = possible_scores
-            .iter()
-            .combinations(event.number_of_places_win)
-            //Sort possible combinations in desc order
-            .map(|mut combos| {
-                combos.sort_by_key(|n| i64::MAX - *n);
-                combos
-            })
-            .filter(|combination| {
-                // Check if the combination is sorted in descending order, if not filter out of possible outcomes
-                combination.windows(2).all(|window| window[0] >= window[1])
-            })
-            .map(|combination| combination.into_iter().cloned().collect())
-            .collect();
-        info!("outcomes: {:?}", possible_outcome_rankings);
-        // holds all possible scoring results of the event
-        let outcome_messages: Vec<Vec<u8>> = possible_outcome_rankings
-            .into_iter()
-            .map(|inner_vec| {
-                inner_vec
-                    .into_iter()
-                    .flat_map(|num| num.to_be_bytes())
-                    .collect::<Vec<u8>>()
-            })
-            .collect();
+        let outcome_messages: Vec<Vec<u8>> = generate_outcome_messages(possible_user_outcomes);
 
         let mut rng = rand::thread_rng();
         let nonce = Scalar::random(&mut rng);
@@ -193,7 +160,7 @@ impl CreateEventData {
             signing_date: event.signing_date,
             nonce,
             total_allowed_entries: event.total_allowed_entries as i64,
-            number_of_places_win: event.number_of_places_win as i64,
+            number_of_places_win: 1_i64, // Default to 1 winning score to simplify possible outcomes
             number_of_values_per_entry: event.number_of_values_per_entry as i64,
             locations: event.clone().locations,
             event_annoucement,

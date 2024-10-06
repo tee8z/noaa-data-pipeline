@@ -26,8 +26,7 @@ async fn can_create_entry_into_event() {
             String::from("PAPG"),
             String::from("KWMC"),
         ],
-        total_allowed_entries: 100,
-        number_of_places_win: 3,
+        total_allowed_entries: 5,
         number_of_values_per_entry: 6,
         coordinator: None,
     };
@@ -93,8 +92,7 @@ async fn can_create_and_get_event_entry() {
             String::from("PAPG"),
             String::from("KWMC"),
         ],
-        total_allowed_entries: 100,
-        number_of_places_win: 3,
+        total_allowed_entries: 10,
         number_of_values_per_entry: 6,
         coordinator: None,
     };

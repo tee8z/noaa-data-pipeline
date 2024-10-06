@@ -28,8 +28,7 @@ async fn can_create_oracle_event() {
             String::from("PAPG"),
             String::from("KWMC"),
         ],
-        total_allowed_entries: 100,
-        number_of_places_win: 3,
+        total_allowed_entries: 5,
         number_of_values_per_entry: 6,
         coordinator: None,
     };
@@ -57,10 +56,6 @@ async fn can_create_oracle_event() {
     );
     assert_eq!(res.entry_ids.len(), 0);
     assert_eq!(
-        res.number_of_places_win,
-        new_event.number_of_places_win as i64
-    );
-    assert_eq!(
         res.number_of_values_per_entry,
         new_event.number_of_values_per_entry as i64
     );
@@ -87,8 +82,7 @@ async fn can_create_and_get_oracle_event() {
             String::from("PAPG"),
             String::from("KWMC"),
         ],
-        total_allowed_entries: 100,
-        number_of_places_win: 3,
+        total_allowed_entries: 5,
         number_of_values_per_entry: 6,
         coordinator: None,
     };
@@ -149,10 +143,6 @@ async fn can_create_and_get_oracle_event() {
         new_event.total_allowed_entries as i64
     );
     assert_eq!(res.entry_ids.len(), 0);
-    assert_eq!(
-        res.number_of_places_win,
-        new_event.number_of_places_win as i64
-    );
     assert_eq!(
         res.number_of_values_per_entry,
         new_event.number_of_values_per_entry as i64

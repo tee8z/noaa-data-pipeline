@@ -16,7 +16,6 @@ use nostr::{key::Keys, nips::nip19::ToBech32};
 use pem_rfc7468::{decode_vec, encode_string};
 use std::{
     cmp,
-    collections::BTreeMap,
     fs::{metadata, File},
     io::{Read, Write},
     path::Path,
@@ -151,6 +150,17 @@ impl Oracle {
     }
 
     pub async fn create_event(&self, event: CreateEvent) -> Result<Event, Error> {
+        if event.id.get_version_num() != 7 {
+            return Err(Error::BadEvent(anyhow!(
+                "event needs to provide a valid Uuidv7 for event id {}",
+                event.id
+            )));
+        }
+        if event.total_allowed_entries > 25 {
+            return Err(Error::BadEvent(anyhow!(
+                "Max number of allowed entries the oracle can watch is 25"
+            )));
+        }
         if let Some(coordinator) = event.coordinator.clone() {
             let message: CreateEventMessage = event.clone().into();
             info!("create event: {:?}", message);
@@ -516,37 +526,31 @@ impl Oracle {
             entry_indexies.sort_by_key(|entry| entry.id);
 
             entries.sort_by_key(|entry| cmp::Reverse(entry.score));
-            let winning_scores: Vec<i64> = entries
-                .iter()
-                .take(event.number_of_places_win as usize)
-                .map(|entry| entry.score.unwrap_or_default()) // default means '0' was winning score
-                .collect();
+            // we have set the number_of_places_win to 1 always (ranking can't be done in large groups efficiently at the moment)
+            let winning_score: i64 = entries[1].score.unwrap_or_default(); // default means '0' was winning score;
 
-            let winners: BTreeMap<usize, Vec<usize>> =
-                get_winners(entry_indexies.clone(), winning_scores);
+            let winners: Vec<usize> = get_winners(entry_indexies.clone(), winning_score);
 
             let winner_bytes: Vec<u8> = get_winning_bytes(winners.clone());
 
             if event.signing_date < OffsetDateTime::now_utc() {
+                info!(
+                    "outcome_messages: {:?}",
+                    event.event_annoucement.outcome_messages
+                );
+                info!("winner_bytes: {:?}", winner_bytes);
                 let outcome_index = event
                     .event_annoucement
                     .outcome_messages
                     .iter()
                     .position(|outcome| *outcome == winner_bytes);
-
-                let winners_str = winners
+                let winning_entries = winners
                     .iter()
-                    .map(|(score, winning_entry_indexies)| {
-                        let entries: String = winning_entry_indexies
-                            .iter()
-                            .filter_map(|entry_index| entry_indexies.get(entry_index.clone()))
-                            .map(|entry| entry.id.to_string())
-                            .collect::<Vec<String>>()
-                            .join(",");
-                        format!("({}, {})", score, entries)
-                    })
+                    .filter_map(|entry_index| entry_indexies.get(*entry_index))
+                    .map(|entry| entry.id.to_string())
                     .collect::<Vec<String>>()
                     .join(",");
+                let winners_str = format!("({}, {})", winning_score, winning_entries);
 
                 let Some(index) = outcome_index else {
                     // Something went horribly wrong, use the info from this log line to track refunding users based on DLC expiry (we set to 1 week)
@@ -608,39 +612,26 @@ impl Oracle {
     }
 }
 
-pub fn get_winners(
-    entry_indexies: Vec<WeatherEntry>,
-    winning_scores: Vec<i64>,
-) -> BTreeMap<usize, Vec<usize>> {
-    let mut winners: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    for score in winning_scores.clone() {
-        winners.insert(score as usize, vec![]);
-    }
+pub fn get_winners(entry_indexies: Vec<WeatherEntry>, winning_score: i64) -> Vec<usize> {
+    let mut winners: Vec<usize> = Vec::new();
     let entry_indexies_iter = entry_indexies.iter();
     for (entry_index, entry) in entry_indexies_iter.enumerate() {
         let Some(score) = entry.score else { continue };
-        if winning_scores.contains(&score) {
-            let Some(rank_winners) = winners.get_mut(&(score as usize)) else {
-                continue;
-            };
-            rank_winners.push(entry_index);
+        if winning_score == score {
+            winners.push(entry_index);
         }
     }
+
+    winners.sort();
 
     winners
 }
 
-pub fn get_winning_bytes(winners: BTreeMap<usize, Vec<usize>>) -> Vec<u8> {
+pub fn get_winning_bytes(winners: Vec<usize>) -> Vec<u8> {
     winners
-        .clone()
         .into_iter()
-        .flat_map(|(_, values)| {
-            values
-                .iter()
-                .flat_map(|val| val.to_be_bytes())
-                .collect::<Vec<_>>()
-        })
-        .collect()
+        .flat_map(|num| num.to_be_bytes())
+        .collect::<Vec<u8>>()
 }
 
 async fn add_only_forecast_data(

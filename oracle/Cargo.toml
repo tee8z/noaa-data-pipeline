@@ -1,6 +1,6 @@
 [package]
 name = "oracle"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 repository = "https://github.com/tee8z/noaa-data-pipeline"
 
@@ -34,6 +34,7 @@ num_cpus = "1.16.0"
 openssl = { version = "0.10.60", features = ["vendored"] }
 pem-rfc7468 = { version = "0.7.0", features = ["alloc"] }
 rand = "0.8.5"
+rayon = "1.8"
 regex = "1.10.3"
 rustix = "0.38.19"
 scooby = "0.5.0"
@@ -66,5 +67,4 @@ uuid = { version = "1.4.1", features = ["v7", "serde"] }
 
 [dev-dependencies]
 tower = "0.4.13"
-maplit = "1.0.2"
 mockall = "0.13.0"

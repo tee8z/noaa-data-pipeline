@@ -27,8 +27,7 @@ async fn can_get_all_events() {
             String::from("PAPG"),
             String::from("KWMC"),
         ],
-        total_allowed_entries: 100,
-        number_of_places_win: 3,
+        total_allowed_entries: 5,
         number_of_values_per_entry: 6,
         coordinator: None,
     };
@@ -42,8 +41,7 @@ async fn can_get_all_events() {
             String::from("PAPG"),
             String::from("KJAN"),
         ],
-        total_allowed_entries: 100,
-        number_of_places_win: 3,
+        total_allowed_entries: 5,
         number_of_values_per_entry: 6,
         coordinator: None,
     };
@@ -57,8 +55,7 @@ async fn can_get_all_events() {
             String::from("KCRW"),
             String::from("KDED"),
         ],
-        total_allowed_entries: 100,
-        number_of_places_win: 3,
+        total_allowed_entries: 5,
         number_of_values_per_entry: 6,
         coordinator: None,
     };
@@ -107,10 +104,6 @@ async fn can_get_all_events() {
             cur_expect.total_allowed_entries as i64
         );
         assert_eq!(event_summary.total_entries, 0);
-        assert_eq!(
-            event_summary.number_of_places_win,
-            cur_expect.number_of_places_win as i64
-        );
         assert!(event_summary.weather.is_empty());
         assert!(event_summary.attestation.is_none());
     }

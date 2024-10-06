@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use anyhow::anyhow;
 use dlctix::bitcoin::{hashes::sha256, XOnlyPublicKey};
 use dlctix::musig2::secp256k1::schnorr::Signature;
@@ -43,8 +41,6 @@ pub struct CreateEvent {
     pub number_of_values_per_entry: usize,
     /// Total number of allowed entries into the event
     pub total_allowed_entries: usize,
-    /// Total amount of places that are part of the winnings split
-    pub number_of_places_win: usize,
     /// Add a coordinator that will use the event entries in a competition
     pub coordinator: Option<CoordinatorInfo>,
 }
@@ -57,7 +53,7 @@ pub struct CreateEventMessage {
     /// Time at which the attestation will be added to the event, needs to be after the observation date
     pub signing_date: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
-    /// Date of when the weather observations occured (midnight UTC), all entries must be made before this time
+    /// Date of when the weather observations occurred (midnight UTC), all entries must be made before this time
     pub observation_date: OffsetDateTime,
     /// NOAA observation stations used in this event
     pub locations: Vec<String>,
@@ -65,8 +61,6 @@ pub struct CreateEventMessage {
     pub number_of_values_per_entry: usize,
     /// Total number of allowed entries into the event
     pub total_allowed_entries: usize,
-    /// Total amount of places that are part of the winnings split
-    pub number_of_places_win: usize,
 }
 
 impl CreateEventMessage {
@@ -86,7 +80,6 @@ impl From<CreateEvent> for CreateEventMessage {
             locations: value.locations,
             number_of_values_per_entry: value.number_of_values_per_entry,
             total_allowed_entries: value.total_allowed_entries,
-            number_of_places_win: value.number_of_places_win,
         }
     }
 }
@@ -138,9 +131,8 @@ impl CreateEventData {
                 event.observation_date.format(&Rfc3339).unwrap()
             ));
         }
-
-        let possible_user_outcomes: Vec<BTreeMap<usize, Vec<usize>>> =
-            generate_ranked_players(event.total_allowed_entries, event.number_of_places_win);
+        let possible_user_outcomes: Vec<Vec<usize>> =
+            generate_winner_permutations(event.total_allowed_entries);
         info!("user outcomes: {:?}", possible_user_outcomes);
 
         let outcome_messages: Vec<Vec<u8>> = generate_outcome_messages(possible_user_outcomes);
@@ -168,7 +160,7 @@ impl CreateEventData {
             signing_date: event.signing_date,
             nonce,
             total_allowed_entries: event.total_allowed_entries as i64,
-            number_of_places_win: event.number_of_places_win as i64,
+            number_of_places_win: 1_i64, // Default to 1 winning score to simplify possible outcomes
             number_of_values_per_entry: event.number_of_values_per_entry as i64,
             locations: event.clone().locations,
             event_annoucement,

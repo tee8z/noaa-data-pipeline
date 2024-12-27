@@ -63,7 +63,7 @@ async fn can_create_oracle_event() {
     assert!(res.nonce.serialize().len() > 0);
     assert!(res.attestation.is_none());
     assert!(res
-        .event_annoucement
+        .event_announcement
         .is_valid_outcome(&Outcome::Attestation(1)));
 }
 
@@ -151,6 +151,6 @@ async fn can_create_and_get_oracle_event() {
     assert!(res.nonce.serialize().len() > 0);
     assert!(res.attestation.is_none());
     assert!(res
-        .event_annoucement
+        .event_announcement
         .is_valid_outcome(&Outcome::Attestation(1)));
 }

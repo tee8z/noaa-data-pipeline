@@ -410,8 +410,10 @@ impl Oracle {
                 continue;
             }
 
-            // Score logic, match on Par 2pts, on Over 1pt, on Under 1pt
-            let mut total_score = 0;
+            // Score logic, match on Par 2pts, on Over 1pt, on Under 1pt, created_at used as tie breaker (older > newer)
+            let mut base_score = 0;
+            const OVER_OR_UNDER_POINTS: u64 = 10;
+            const PAR_POINTS: u64 = 20;
             let expected_observations = entry.expected_observations.clone();
             let locations = event.locations.clone();
             for location in locations {
@@ -442,17 +444,17 @@ impl Oracle {
                     match high_temp {
                         ValueOptions::Over => {
                             if forecast.temp_high < observation.temp_high.round() as i64 {
-                                total_score += 1;
+                                base_score += OVER_OR_UNDER_POINTS;
                             }
                         }
                         ValueOptions::Par => {
                             if forecast.temp_high == observation.temp_high.round() as i64 {
-                                total_score += 2;
+                                base_score += PAR_POINTS;
                             }
                         }
                         ValueOptions::Under => {
                             if forecast.temp_high > observation.temp_high.round() as i64 {
-                                total_score += 1;
+                                base_score += OVER_OR_UNDER_POINTS;
                             }
                         }
                     }
@@ -462,17 +464,17 @@ impl Oracle {
                     match temp_low {
                         ValueOptions::Over => {
                             if forecast.temp_low < observation.temp_low.round() as i64 {
-                                total_score += 1;
+                                base_score += OVER_OR_UNDER_POINTS;
                             }
                         }
                         ValueOptions::Par => {
                             if forecast.temp_low == observation.temp_low.round() as i64 {
-                                total_score += 2;
+                                base_score += PAR_POINTS;
                             }
                         }
                         ValueOptions::Under => {
                             if forecast.temp_low > observation.temp_low.round() as i64 {
-                                total_score += 1;
+                                base_score += OVER_OR_UNDER_POINTS;
                             }
                         }
                     }
@@ -482,22 +484,45 @@ impl Oracle {
                     match wind_speed {
                         ValueOptions::Over => {
                             if forecast.wind_speed < observation.wind_speed {
-                                total_score += 1;
+                                base_score += OVER_OR_UNDER_POINTS;
                             }
                         }
                         ValueOptions::Par => {
                             if forecast.wind_speed == observation.wind_speed {
-                                total_score += 2;
+                                base_score += PAR_POINTS;
                             }
                         }
                         ValueOptions::Under => {
                             if forecast.wind_speed > observation.wind_speed {
-                                total_score += 1;
+                                base_score += OVER_OR_UNDER_POINTS;
                             }
                         }
                     }
                 }
             }
+            let (created_at_secs, created_at_nano) = entry
+                .id
+                .get_timestamp()
+                .expect("UUIDv7 should have timestamp")
+                .to_unix();
+            let time_millis = (created_at_secs * 1000) + (created_at_nano as u64 / 1_000_000);
+            let time_part = 9999 - (time_millis % 10000) as u64;
+
+            /* By adding the time element we are able to make competitions that have 1mil unique possible scores
+            meaning no ties under the following constraints:
+
+            With queue for entries (serialized creation):
+            - Up to 10,000 entries over 24h: negligible collision risk
+            - Max burst: ~40 entries/second with millisecond precision
+
+            Without queue for entries (concurrent creation):
+            - Up to 1,300 entries over 24h: negligible collision risk
+            - Burst limit: ~30 entries/second for < 0.01% collision risk
+
+            This is important for keeping the amount of possible outcomes for the DLC as low as possible
+            but able to scale to as many entries as possible
+            */
+            let total_score = ((base_score * 10000) + time_part) as i64;
 
             info!(
                 "updating entry {} for event {} to score {} in etl process {}",
@@ -520,51 +545,61 @@ impl Oracle {
         let mut events: Vec<SignEvent> = self.event_data.get_events_to_sign(event_ids).await?;
         info!("events: {:?}", events);
         for event in events.iter_mut() {
-            let mut entries = self.event_data.get_event_weather_entries(&event.id).await?;
-            let mut entry_indexies = entries.clone();
+            let entries = self.event_data.get_event_weather_entries(&event.id).await?;
+            let mut entry_indices = entries.clone();
             // very important, the sort index of the entry should always be the same when getting the outcome
-            entry_indexies.sort_by_key(|entry| entry.id);
+            entry_indices.sort_by_key(|entry| entry.id);
 
-            entries.sort_by_key(|entry| cmp::Reverse(entry.score));
-            // we have set the number_of_places_win to 1 always (ranking can't be done in large groups efficiently at the moment)
-            let winning_score: i64 = entries[1].score.unwrap_or_default(); // default means '0' was winning score;
+            // Sort by score descending for top 3
+            let mut top_entries = entries.clone();
+            top_entries.sort_by_key(|entry| cmp::Reverse(entry.score));
+            top_entries.truncate(3);
 
-            let winners: Vec<usize> = get_winners(entry_indexies.clone(), winning_score);
+            // Get indices of top 3 in original entry_indices order
+            let winners: Vec<usize> = top_entries
+                .iter()
+                .map(|top_entry| {
+                    entry_indices
+                        .iter()
+                        .position(|entry| entry.id == top_entry.id)
+                        .expect("Entry should exist")
+                })
+                .collect();
 
             let winner_bytes: Vec<u8> = get_winning_bytes(winners.clone());
 
             if event.signing_date < OffsetDateTime::now_utc() {
                 info!(
                     "outcome_messages: {:?}",
-                    event.event_annoucement.outcome_messages
+                    event.event_announcement.outcome_messages
                 );
                 info!("winner_bytes: {:?}", winner_bytes);
                 let outcome_index = event
-                    .event_annoucement
+                    .event_announcement
                     .outcome_messages
                     .iter()
                     .position(|outcome| *outcome == winner_bytes);
-                let winning_entries = winners
+
+                let winners_str = winners
                     .iter()
-                    .filter_map(|entry_index| entry_indexies.get(*entry_index))
-                    .map(|entry| entry.id.to_string())
+                    .filter_map(|entry_index| entry_indices.get(*entry_index))
+                    .map(|entry| format!("({}, {})", entry.score.unwrap_or_default(), entry.id))
                     .collect::<Vec<String>>()
-                    .join(",");
-                let winners_str = format!("({}, {})", winning_score, winning_entries);
+                    .join(", ");
 
                 let Some(index) = outcome_index else {
                     // Something went horribly wrong, use the info from this log line to track refunding users based on DLC expiry (we set to 1 week)
-                    error!("final result doesn't match any of the possible outcomes: event_id {} winners {} expiry {:?}", event.id, winners_str, event.event_annoucement.expiry);
+                    error!("final result doesn't match any of the possible outcomes: event_id {} winners {} expiry {:?}", event.id, winners_str, event.event_announcement.expiry);
 
                     return Err(Error::OutcomeNotFound(format!(
                         "event_id {} outcome winners {} expiry {:?}",
-                        event.id, winners_str, event.event_annoucement.expiry
+                        event.id, winners_str, event.event_announcement.expiry
                     )));
                 };
 
                 info!("winners: event_id {} winners {}", event.id, winners_str);
 
-                event.attestation = event.event_annoucement.attestation_secret(
+                event.attestation = event.event_announcement.attestation_secret(
                     index,
                     self.private_key,
                     event.nonce,
@@ -612,25 +647,10 @@ impl Oracle {
     }
 }
 
-pub fn get_winners(entry_indexies: Vec<WeatherEntry>, winning_score: i64) -> Vec<usize> {
-    let mut winners: Vec<usize> = Vec::new();
-    let entry_indexies_iter = entry_indexies.iter();
-    for (entry_index, entry) in entry_indexies_iter.enumerate() {
-        let Some(score) = entry.score else { continue };
-        if winning_score == score {
-            winners.push(entry_index);
-        }
-    }
-
-    winners.sort();
-
-    winners
-}
-
 pub fn get_winning_bytes(winners: Vec<usize>) -> Vec<u8> {
     winners
-        .into_iter()
-        .flat_map(|num| num.to_be_bytes())
+        .iter()
+        .flat_map(|&idx| idx.to_be_bytes())
         .collect::<Vec<u8>>()
 }
 

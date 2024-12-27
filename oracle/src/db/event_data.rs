@@ -235,7 +235,7 @@ impl EventData {
         let observation_date = OffsetDateTime::format(event.observation_date, &Rfc3339)
             .map_err(|e| duckdb::Error::ToSqlConversionFailure(Box::new(e)))?;
         let nonce = to_vec(&event.nonce).unwrap();
-        let annoucement_bytes = to_vec(&event.event_annoucement).unwrap();
+        let announcement_bytes = to_vec(&event.event_announcement).unwrap();
         let conn = self.new_write_connection_retry().await?;
         let mut stmt = conn.prepare(
             "INSERT INTO events (
@@ -247,7 +247,7 @@ impl EventData {
                 signing_date,
                 observation_date,
                 locations,
-                event_annoucement,
+                event_announcement,
                 coordinator_pubkey) VALUES(?,?,?,?,?,?,?,?,?,?)",
         )?;
         stmt.execute(params![
@@ -259,7 +259,7 @@ impl EventData {
             signing_date,
             observation_date,
             locations_sql,
-            annoucement_bytes,
+            announcement_bytes,
             event.coordinator_pubkey
         ])?;
 
@@ -679,7 +679,7 @@ impl EventData {
             "id",
             "signing_date::TEXT",
             "observation_date::TEXT",
-            "event_annoucement",
+            "event_announcement",
             "locations",
             "total_allowed_entries",
             "number_of_places_win",
@@ -764,7 +764,7 @@ impl EventData {
             "number_of_values_per_entry",
             "attestation_signature",
             "nonce",
-            "event_annoucement",
+            "event_announcement",
         ))
         .from("events")
         .where_(where_clause);

@@ -15,7 +15,25 @@ use serde_json::from_slice;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::time::sleep;
 use tower::ServiceExt;
-use uuid::Uuid;
+use uuid::{ClockSequence, Timestamp, Uuid};
+
+fn get_uuid_from_timestamp(timestamp_str: &str) -> Uuid {
+    struct Context;
+    impl ClockSequence for Context {
+        type Output = u16;
+        fn generate_sequence(&self, _ts_secs: u64, _ts_nanos: u32) -> u16 {
+            0
+        }
+    }
+
+    let dt = OffsetDateTime::parse(
+        timestamp_str,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .expect("Valid RFC3339 timestamp");
+    let ts = Timestamp::from_unix(Context, dt.unix_timestamp() as u64, dt.nanosecond());
+    Uuid::new_v7(ts)
+}
 
 #[tokio::test]
 async fn can_handle_no_events() {
@@ -73,8 +91,9 @@ async fn can_get_event_run_etl_and_see_it_signed() {
 
     info!("above create event");
     let event = test_app.oracle.create_event(new_event_1).await.unwrap();
+
     let entry_1 = AddEventEntry {
-        id: Uuid::now_v7(),
+        id: get_uuid_from_timestamp("2024-08-11T00:00:00.10Z"),
         event_id: event.id,
         expected_observations: vec![
             WeatherChoices {
@@ -99,7 +118,7 @@ async fn can_get_event_run_etl_and_see_it_signed() {
         coordinator: None,
     };
     let entry_2 = AddEventEntry {
-        id: Uuid::now_v7(),
+        id: get_uuid_from_timestamp("2024-08-11T00:00:00.20Z"),
         event_id: event.id,
         expected_observations: vec![
             WeatherChoices {
@@ -124,7 +143,7 @@ async fn can_get_event_run_etl_and_see_it_signed() {
         coordinator: None,
     };
     let entry_3 = AddEventEntry {
-        id: Uuid::now_v7(),
+        id: get_uuid_from_timestamp("2024-08-11T00:00:00.30Z"),
         event_id: event.id,
         expected_observations: vec![
             WeatherChoices {
@@ -149,7 +168,7 @@ async fn can_get_event_run_etl_and_see_it_signed() {
         coordinator: None,
     };
     let entry_4 = AddEventEntry {
-        id: Uuid::now_v7(),
+        id: get_uuid_from_timestamp("2024-08-11T00:00:00.40Z"),
         event_id: event.id,
         expected_observations: vec![
             WeatherChoices {
@@ -257,53 +276,60 @@ async fn can_get_event_run_etl_and_see_it_signed() {
     let mut entries_scores_order = res.entries.clone();
     entries_scores_order.sort_by_key(|entry| cmp::Reverse(entry.score));
     info!("entries: {:?}", entries_scores_order);
+
     // Make sure the expected entries won and calculated the correct score for each
-    // We expect a tie between entry_1 and entry_3 with 4 pts
     let entry_1_res = entries_scores_order
         .iter()
         .find(|entry| entry.id == entry_1.id)
         .unwrap();
-    assert_eq!(entry_1_res.score.unwrap(), 4);
+    assert_eq!(entry_1_res.score.unwrap(), 409899);
     let entry_2_res = entries_scores_order
         .iter()
         .find(|entry| entry.id == entry_2.id)
         .unwrap();
-    assert_eq!(entry_2_res.score.unwrap(), 3);
+    assert_eq!(entry_2_res.score.unwrap(), 309799);
     let entry_3_res = entries_scores_order
         .iter()
         .find(|entry| entry.id == entry_3.id)
         .unwrap();
-    assert_eq!(entry_3_res.score.unwrap(), 4);
+    assert_eq!(entry_3_res.score.unwrap(), 409699);
     let entry_4_res = entries_scores_order
         .iter()
         .find(|entry| entry.id == entry_4.id)
         .unwrap();
-    assert_eq!(entry_4_res.score.unwrap(), 1);
+    assert_eq!(entry_4_res.score.unwrap(), 109599);
 
-    let entry_outcome_order = res.entries.clone();
-    entries_scores_order.sort_by_key(|entry| entry.id);
-    let entry_3_index = entry_outcome_order
+    let mut entry_outcome_order = res.entries.clone();
+    entry_outcome_order.sort_by_key(|entry| entry.id);
+
+    let first_place_index = entry_outcome_order
+        .iter()
+        .position(|entry| entry.id == entry_1.id)
+        .unwrap();
+
+    let second_place_index = entry_outcome_order
         .iter()
         .position(|entry| entry.id == entry_3.id)
         .unwrap();
-    let entry_4_index = entry_outcome_order
+
+    let third_place_index = entry_outcome_order
         .iter()
-        .position(|entry| entry.id == entry_4.id)
+        .position(|entry| entry.id == entry_2.id)
         .unwrap();
 
-    let mut winners = vec![entry_3_index, entry_4_index];
-    winners.sort();
+    let winners = vec![first_place_index, second_place_index, third_place_index];
+
     let winning_bytes = get_winning_bytes(winners);
     println!("winning_bytes in test: {:?}", winning_bytes);
 
     let outcome_index = event
-        .event_annoucement
+        .event_announcement
         .outcome_messages
         .iter()
         .position(|outcome| *outcome == winning_bytes)
         .unwrap();
 
-    let attested_outcome = res.event_annoucement.attestation_secret(
+    let attested_outcome = res.event_announcement.attestation_secret(
         outcome_index,
         test_app.oracle.raw_private_key(),
         res.nonce,

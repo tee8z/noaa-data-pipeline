@@ -57,7 +57,7 @@ pub fn create_initial_schema(conn: &mut Connection) -> Result<(), duckdb::Error>
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           nonce BLOB NOT NULL,
-          event_annoucement BLOB NOT NULL,
+          event_announcement BLOB NOT NULL,
           locations TEXT[] NOT NULL,
           coordinator_pubkey TEXT,
           attestation_signature BLOB

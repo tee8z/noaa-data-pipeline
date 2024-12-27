@@ -111,7 +111,7 @@ pub struct CreateEventData {
     /// Used to sign the result of the event being watched
     pub nonce: Scalar,
     /// Used in constructing the dlctix transactions
-    pub event_annoucement: EventAnnouncement,
+    pub event_announcement: EventAnnouncement,
     /// The pubkey of the coordinator
     pub coordinator_pubkey: Option<String>,
 }
@@ -131,8 +131,9 @@ impl CreateEventData {
                 event.observation_date.format(&Rfc3339).unwrap()
             ));
         }
+        let allowed_scored_ranks = 3;
         let possible_user_outcomes: Vec<Vec<usize>> =
-            generate_winner_permutations(event.total_allowed_entries);
+            generate_ranking_permutations(event.total_allowed_entries, allowed_scored_ranks);
         info!("user outcomes: {:?}", possible_user_outcomes);
 
         let outcome_messages: Vec<Vec<u8>> = generate_outcome_messages(possible_user_outcomes);
@@ -140,14 +141,14 @@ impl CreateEventData {
         let mut rng = rand::thread_rng();
         let nonce = Scalar::random(&mut rng);
         let nonce_point = nonce.base_point_mul();
-        // Manually set expiry to 7 days after the signature should have been proveded so users can get their funds back
+        // Manually set expiry to 7 days after the signature should have been provided so users can get their funds back
         let expiry = event
             .signing_date
             .saturating_add(Duration::DAY * 7)
             .unix_timestamp() as u32;
 
-        // The actual accounement the oracle is going to attest the outcome
-        let event_annoucement = EventAnnouncement {
+        // The actual announcement the oracle is going to attest the outcome
+        let event_announcement = EventAnnouncement {
             oracle_pubkey: oracle_pubkey.into(),
             nonce_point,
             outcome_messages,
@@ -163,7 +164,7 @@ impl CreateEventData {
             number_of_places_win: 1_i64, // Default to 1 winning score to simplify possible outcomes
             number_of_values_per_entry: event.number_of_values_per_entry as i64,
             locations: event.clone().locations,
-            event_annoucement,
+            event_announcement,
             coordinator_pubkey: event
                 .coordinator
                 .map(|v| Some(v.pubkey))
@@ -202,7 +203,7 @@ impl From<CreateEventData> for Event {
             total_allowed_entries: value.total_allowed_entries,
             number_of_places_win: value.number_of_places_win,
             number_of_values_per_entry: value.number_of_values_per_entry,
-            event_annoucement: value.event_annoucement,
+            event_announcement: value.event_announcement,
             nonce: value.nonce,
             status: EventStatus::default(),
             entry_ids: vec![],
@@ -238,7 +239,7 @@ pub struct SignEvent {
     pub observation_date: OffsetDateTime,
     pub status: EventStatus,
     pub nonce: Scalar,
-    pub event_annoucement: EventAnnouncement,
+    pub event_announcement: EventAnnouncement,
     pub number_of_places_win: i64,
     pub number_of_values_per_entry: i64,
     pub attestation: Option<MaybeScalar>,
@@ -299,7 +300,7 @@ impl<'a> TryFrom<&Row<'a>> for SignEvent {
                     serde_json::from_slice(&blob)
                 })?
                 .map_err(|e| duckdb::Error::FromSqlConversionFailure(6, Type::Any, Box::new(e)))?,
-            event_annoucement: row
+            event_announcement: row
                 .get::<usize, Value>(7)
                 .map(|raw| {
                     let blob = match raw {
@@ -614,8 +615,8 @@ pub struct Event {
     pub weather: Vec<Weather>,
     /// Nonce the oracle committed to use as part of signing final results
     pub nonce: Scalar,
-    /// Holds the predefined outcomes the oracle will attest to at event complet
-    pub event_annoucement: EventAnnouncement,
+    /// Holds the predefined outcomes the oracle will attest to at event complete
+    pub event_announcement: EventAnnouncement,
     /// When added it means the oracle has signed that the current data is the final result
     pub attestation: Option<MaybeScalar>,
 }
@@ -658,7 +659,7 @@ impl<'a> TryFrom<&Row<'a>> for Event {
                 .map(|val| OffsetDateTime::parse(&val, &sql_time_format))?
                 .map(|val| val.to_offset(UtcOffset::UTC))
                 .map_err(|e| duckdb::Error::FromSqlConversionFailure(2, Type::Any, Box::new(e)))?,
-            event_annoucement: row
+            event_announcement: row
                 .get::<usize, Value>(3)
                 .map(|raw| {
                     let blob = match raw {

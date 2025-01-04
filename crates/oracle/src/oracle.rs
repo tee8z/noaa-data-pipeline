@@ -7,9 +7,10 @@ use crate::{
 use anyhow::anyhow;
 use base64::{engine::general_purpose, Engine};
 use dlctix::{
+    attestation_locking_point, attestation_secret,
     bitcoin::key::Secp256k1,
     musig2::secp256k1::{rand, PublicKey, SecretKey},
-    secp::Point,
+    secp::{MaybePoint, Point},
 };
 use log::{debug, error, info, warn};
 use nostr::{key::Keys, nips::nip19::ToBech32};
@@ -123,7 +124,7 @@ impl Oracle {
 
     pub fn npub(&self) -> Result<String, Error> {
         let secret_key = self.private_key.display_secret().to_string();
-        let keys = Keys::parse(secret_key)?;
+        let keys = Keys::parse(&secret_key)?;
 
         Ok(keys.public_key().to_bech32()?)
     }
@@ -566,19 +567,15 @@ impl Oracle {
                 })
                 .collect();
 
-            let winner_bytes: Vec<u8> = get_winning_bytes(winners.clone());
-
             if event.signing_date < OffsetDateTime::now_utc() {
-                info!(
-                    "outcome_messages: {:?}",
-                    event.event_announcement.outcome_messages
-                );
+                let winner_bytes: Vec<u8> = get_winning_bytes(winners.clone());
+
+                let nonce_point = event.nonce.base_point_mul();
+
+                let locking_point =
+                    attestation_locking_point(self.public_key, nonce_point, &winner_bytes);
+
                 info!("winner_bytes: {:?}", winner_bytes);
-                let outcome_index = event
-                    .event_announcement
-                    .outcome_messages
-                    .iter()
-                    .position(|outcome| *outcome == winner_bytes);
 
                 let winners_str = winners
                     .iter()
@@ -587,7 +584,7 @@ impl Oracle {
                     .collect::<Vec<String>>()
                     .join(", ");
 
-                let Some(index) = outcome_index else {
+                let MaybePoint::Valid(_) = locking_point else {
                     // Something went horribly wrong, use the info from this log line to track refunding users based on DLC expiry (we set to 1 week)
                     error!("final result doesn't match any of the possible outcomes: event_id {} winners {} expiry {:?}", event.id, winners_str, event.event_announcement.expiry);
 
@@ -599,11 +596,8 @@ impl Oracle {
 
                 info!("winners: event_id {} winners {}", event.id, winners_str);
 
-                event.attestation = event.event_announcement.attestation_secret(
-                    index,
-                    self.private_key,
-                    event.nonce,
-                );
+                let attestation = attestation_secret(self.private_key, event.nonce, &winner_bytes);
+                event.attestation = Some(attestation);
                 self.event_data.update_event_attestation(event).await?;
             }
         }

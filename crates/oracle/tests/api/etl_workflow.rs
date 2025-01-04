@@ -5,6 +5,7 @@ use axum::{
     body::{to_bytes, Body},
     http::Request,
 };
+use dlctix::attestation_secret;
 use hyper::{header, Method};
 use log::info;
 use oracle::{
@@ -322,21 +323,11 @@ async fn can_get_event_run_etl_and_see_it_signed() {
     let winning_bytes = get_winning_bytes(winners);
     println!("winning_bytes in test: {:?}", winning_bytes);
 
-    let outcome_index = event
-        .event_announcement
-        .outcome_messages
-        .iter()
-        .position(|outcome| *outcome == winning_bytes)
-        .unwrap();
-
-    let attested_outcome = res.event_announcement.attestation_secret(
-        outcome_index,
-        test_app.oracle.raw_private_key(),
-        res.nonce,
-    );
+    let attested_outcome =
+        attestation_secret(test_app.oracle.raw_private_key(), res.nonce, &winning_bytes);
 
     // Verify the attestation matches what we calculate in the test
-    assert_eq!(attested_outcome, res.attestation);
+    assert_eq!(attested_outcome, res.attestation.unwrap());
 }
 
 fn mock_forecast_data() -> Vec<Forecast> {

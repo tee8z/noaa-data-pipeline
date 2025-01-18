@@ -1,13 +1,14 @@
 use anyhow::anyhow;
-use dlctix::bitcoin::{hashes::sha256, XOnlyPublicKey};
+use dlctix::bitcoin::XOnlyPublicKey;
 use dlctix::musig2::secp256k1::schnorr::Signature;
 use dlctix::musig2::secp256k1::{Message, PublicKey};
 use dlctix::secp::{MaybeScalar, Scalar};
-use dlctix::EventAnnouncement;
+use dlctix::{attestation_locking_point, EventLockingConditions};
 use duckdb::arrow::datatypes::ToByteSlice;
 use duckdb::types::{OrderedMap, ToSqlOutput, Type, Value};
 use duckdb::{ffi, ErrorCode, Row, ToSql};
 use log::{debug, info};
+use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
@@ -66,7 +67,8 @@ pub struct CreateEventMessage {
 impl CreateEventMessage {
     pub fn message(&self) -> Result<Message, serde_json::Error> {
         let message_str = serde_json::to_string(self)?;
-        let message = Message::from_hashed_data::<sha256::Hash>(message_str.as_bytes());
+        let message = Message::from_digest_slice(message_str.as_bytes())
+            .map_err(|e| serde_json::Error::custom(e.to_string()))?;
         Ok(message)
     }
 }
@@ -111,7 +113,7 @@ pub struct CreateEventData {
     /// Used to sign the result of the event being watched
     pub nonce: Scalar,
     /// Used in constructing the dlctix transactions
-    pub event_announcement: EventAnnouncement,
+    pub event_announcement: EventLockingConditions,
     /// The pubkey of the coordinator
     pub coordinator_pubkey: Option<String>,
 }
@@ -147,12 +149,15 @@ impl CreateEventData {
             .saturating_add(Duration::DAY * 7)
             .unix_timestamp() as u32;
 
+        let locking_points = outcome_messages
+            .iter()
+            .map(|msg| attestation_locking_point(oracle_pubkey, nonce_point, msg))
+            .collect();
+
         // The actual announcement the oracle is going to attest the outcome
-        let event_announcement = EventAnnouncement {
-            oracle_pubkey: oracle_pubkey.into(),
-            nonce_point,
-            outcome_messages,
+        let event_announcement = EventLockingConditions {
             expiry: Some(expiry),
+            locking_points,
         };
 
         Ok(Self {
@@ -239,7 +244,7 @@ pub struct SignEvent {
     pub observation_date: OffsetDateTime,
     pub status: EventStatus,
     pub nonce: Scalar,
-    pub event_announcement: EventAnnouncement,
+    pub event_announcement: EventLockingConditions,
     pub number_of_places_win: i64,
     pub number_of_values_per_entry: i64,
     pub attestation: Option<MaybeScalar>,
@@ -616,7 +621,7 @@ pub struct Event {
     /// Nonce the oracle committed to use as part of signing final results
     pub nonce: Scalar,
     /// Holds the predefined outcomes the oracle will attest to at event complete
-    pub event_announcement: EventAnnouncement,
+    pub event_announcement: EventLockingConditions,
     /// When added it means the oracle has signed that the current data is the final result
     pub attestation: Option<MaybeScalar>,
 }
@@ -1275,7 +1280,8 @@ pub struct AddEventEntryMessage {
 impl AddEventEntryMessage {
     pub fn message(&self) -> Result<Message, serde_json::Error> {
         let message_str = serde_json::to_string(self)?;
-        let message = Message::from_hashed_data::<sha256::Hash>(message_str.as_bytes());
+        let message = Message::from_digest_slice(message_str.as_bytes())
+            .map_err(|e| serde_json::Error::custom(e.to_string()))?;
         Ok(message)
     }
 }

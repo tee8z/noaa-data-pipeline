@@ -1,12 +1,20 @@
-use std::sync::{Arc, Once};
-
-use axum::{async_trait, Router};
+use async_trait::async_trait;
+use axum::Router;
 use log::{info, LevelFilter};
 use mockall::mock;
+use nostr_sdk::{
+    hashes::sha256::Hash as Sha256Hash,
+    nips::nip98::{HttpData, HttpMethod},
+    Event, EventBuilder, Keys, Url,
+};
 use oracle::{
     app, create_folder, oracle::Oracle, setup_logger, AppState, EventData, FileData, WeatherData,
 };
 use rand::Rng;
+use std::{
+    str::FromStr,
+    sync::{Arc, Once},
+};
 
 pub struct TestApp {
     pub app: Router,
@@ -81,4 +89,23 @@ mock! {
         ) -> Result<Vec<oracle::Observation>, oracle::weather_data::Error>;
         async fn stations(&self) -> Result<Vec<oracle::Station>, oracle::weather_data::Error>;
     }
+}
+
+pub async fn create_auth_event(
+    method: &str,
+    url: &str,
+    payload_hash: Option<Sha256Hash>,
+    keys: &Keys,
+) -> Event {
+    let http_method = HttpMethod::from_str(method).unwrap();
+    let http_url = Url::from_str(url).unwrap();
+    let mut http_data = HttpData::new(http_url, http_method);
+
+    if let Some(hash) = payload_hash {
+        http_data = http_data.payload(hash);
+    }
+
+    EventBuilder::http_auth(http_data)
+        .sign_with_keys(keys)
+        .expect("Failed to sign event")
 }

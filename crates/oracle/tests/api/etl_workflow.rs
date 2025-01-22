@@ -1,5 +1,3 @@
-use std::{cmp, sync::Arc};
-
 use crate::helpers::{spawn_app, MockWeatherAccess};
 use axum::{
     body::{to_bytes, Body},
@@ -8,11 +6,13 @@ use axum::{
 use dlctix::attestation_secret;
 use hyper::{header, Method};
 use log::info;
+use nostr_sdk::Keys;
 use oracle::{
     oracle::get_winning_bytes, AddEventEntry, CreateEvent, Event, EventStatus, Forecast,
     Observation, WeatherChoices,
 };
 use serde_json::from_slice;
+use std::{cmp, sync::Arc};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::time::sleep;
 use tower::ServiceExt;
@@ -40,12 +40,14 @@ fn get_uuid_from_timestamp(timestamp_str: &str) -> Uuid {
 async fn can_handle_no_events() {
     let weather_data = MockWeatherAccess::new();
     let test_app = spawn_app(Arc::new(weather_data)).await;
+
     let request = Request::builder()
         .method(Method::POST)
         .uri(String::from("/oracle/update"))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::empty())
         .unwrap();
+
     let response = test_app
         .app
         .clone()
@@ -58,6 +60,7 @@ async fn can_handle_no_events() {
 
 #[tokio::test]
 async fn can_get_event_run_etl_and_see_it_signed() {
+    let keys = Keys::generate();
     let mut weather_data = MockWeatherAccess::new();
     //called twice per ETL process
     weather_data
@@ -87,11 +90,15 @@ async fn can_get_event_run_etl_and_see_it_signed() {
         ],
         total_allowed_entries: 4,
         number_of_values_per_entry: 6,
-        coordinator: None,
+        number_of_places_win: 1,
     };
 
     info!("above create event");
-    let event = test_app.oracle.create_event(new_event_1).await.unwrap();
+    let event = test_app
+        .oracle
+        .create_event(keys.public_key, new_event_1)
+        .await
+        .unwrap();
 
     let entry_1 = AddEventEntry {
         id: get_uuid_from_timestamp("2024-08-11T00:00:00.10Z"),
@@ -116,7 +123,6 @@ async fn can_get_event_run_etl_and_see_it_signed() {
                 wind_speed: Some(oracle::ValueOptions::Par),
             },
         ],
-        coordinator: None,
     };
     let entry_2 = AddEventEntry {
         id: get_uuid_from_timestamp("2024-08-11T00:00:00.20Z"),
@@ -141,7 +147,6 @@ async fn can_get_event_run_etl_and_see_it_signed() {
                 wind_speed: None,
             },
         ],
-        coordinator: None,
     };
     let entry_3 = AddEventEntry {
         id: get_uuid_from_timestamp("2024-08-11T00:00:00.30Z"),
@@ -166,7 +171,6 @@ async fn can_get_event_run_etl_and_see_it_signed() {
                 wind_speed: Some(oracle::ValueOptions::Under),
             },
         ],
-        coordinator: None,
     };
     let entry_4 = AddEventEntry {
         id: get_uuid_from_timestamp("2024-08-11T00:00:00.40Z"),
@@ -191,26 +195,25 @@ async fn can_get_event_run_etl_and_see_it_signed() {
                 wind_speed: Some(oracle::ValueOptions::Under),
             },
         ],
-        coordinator: None,
     };
     test_app
         .oracle
-        .add_event_entry(entry_1.clone())
+        .add_event_entry(keys.public_key, entry_1.clone())
         .await
         .unwrap();
     test_app
         .oracle
-        .add_event_entry(entry_2.clone())
+        .add_event_entry(keys.public_key, entry_2.clone())
         .await
         .unwrap();
     test_app
         .oracle
-        .add_event_entry(entry_3.clone())
+        .add_event_entry(keys.public_key, entry_3.clone())
         .await
         .unwrap();
     test_app
         .oracle
-        .add_event_entry(entry_4.clone())
+        .add_event_entry(keys.public_key, entry_4.clone())
         .await
         .unwrap();
 

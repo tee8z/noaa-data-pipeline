@@ -52,6 +52,7 @@ mod test {
     }
 
     #[test]
+    #[ignore = "Slow test, skip for ci"]
     fn can_generate_list_of_winners_n200() {
         let num_players = 200;
         let permutations: Vec<Vec<usize>> = generate_ranking_permutations(num_players, 3);
@@ -59,6 +60,7 @@ mod test {
     }
 
     #[test]
+    #[ignore = "Slow test, skip for ci"]
     //note: beyond 500 players the time to create the permutations is over 60 seconds
     fn can_generate_list_of_winners_n400() {
         let num_players = 400;

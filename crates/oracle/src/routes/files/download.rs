@@ -22,7 +22,7 @@ use crate::{drop_suffix, AppState};
          ("filename" = String, Path, description = "Name of file to download"),
     ),
     responses(
-        (status = OK, description = "Successfully retrieved file", body = Body),
+        (status = OK, description = "Successfully retrieved file", content_type = "application/parquet", body = Vec<u8>),
         (status = BAD_REQUEST, description = "Invalid file name"),
         (status = INTERNAL_SERVER_ERROR, description = "Failed to retrieve file by name")
     ))]

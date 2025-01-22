@@ -1,13 +1,13 @@
-use std::sync::Arc;
-
 use crate::helpers::{spawn_app, MockWeatherAccess};
 use axum::{
     body::{to_bytes, Body},
     http::Request,
 };
 use hyper::{header, Method};
+use nostr_sdk::Keys;
 use oracle::{CreateEvent, EventSummary};
 use serde_json::from_slice;
+use std::sync::Arc;
 use time::OffsetDateTime;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -16,6 +16,7 @@ use uuid::Uuid;
 async fn can_get_all_events() {
     let uri = String::from("/oracle/events");
     let test_app = spawn_app(Arc::new(MockWeatherAccess::new())).await;
+    let keys = Keys::generate();
 
     let new_event_1 = CreateEvent {
         id: Uuid::now_v7(),
@@ -29,7 +30,7 @@ async fn can_get_all_events() {
         ],
         total_allowed_entries: 5,
         number_of_values_per_entry: 6,
-        coordinator: None,
+        number_of_places_win: 1,
     };
     let new_event_2 = CreateEvent {
         id: Uuid::now_v7(),
@@ -43,7 +44,7 @@ async fn can_get_all_events() {
         ],
         total_allowed_entries: 5,
         number_of_values_per_entry: 6,
-        coordinator: None,
+        number_of_places_win: 1,
     };
     let new_event_3 = CreateEvent {
         id: Uuid::now_v7(),
@@ -57,16 +58,28 @@ async fn can_get_all_events() {
         ],
         total_allowed_entries: 5,
         number_of_values_per_entry: 6,
-        coordinator: None,
+        number_of_places_win: 1,
     };
     let expected = vec![
         new_event_1.clone(),
         new_event_2.clone(),
         new_event_3.clone(),
     ];
-    test_app.oracle.create_event(new_event_1).await.unwrap();
-    test_app.oracle.create_event(new_event_2).await.unwrap();
-    test_app.oracle.create_event(new_event_3).await.unwrap();
+    test_app
+        .oracle
+        .create_event(keys.public_key, new_event_1)
+        .await
+        .unwrap();
+    test_app
+        .oracle
+        .create_event(keys.public_key, new_event_2)
+        .await
+        .unwrap();
+    test_app
+        .oracle
+        .create_event(keys.public_key, new_event_3)
+        .await
+        .unwrap();
 
     let request = Request::builder()
         .method(Method::GET)

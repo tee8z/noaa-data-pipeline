@@ -1,5 +1,6 @@
 use crate::{
-    oracle, AddEventEntry, AppState, CreateEvent, Event, EventFilter, EventSummary, WeatherEntry,
+    oracle, AddEventEntry, AppState, CreateEvent, Event, EventFilter, EventSummary, NostrAuth,
+    WeatherEntry,
 };
 use axum::{
     extract::{Path, Query, State},
@@ -84,14 +85,17 @@ pub async fn list_events(
     responses(
         (status = OK, description = "Successfully created oracle weather event", body = Event),
         (status = BAD_REQUEST, description = "Invalid event to be created"),
+        (status = FORBIDDEN, description = "Invalid signature from coordinator in nostr authorization header"),
+        (status = UNAUTHORIZED, description = "Invalid nostr authorization header nip-98 using coordinator keys"),
     ))]
 pub async fn create_event(
+    NostrAuth { pubkey, .. }: NostrAuth,
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateEvent>,
 ) -> Result<Json<Event>, ErrorResponse> {
     state
         .oracle
-        .create_event(body)
+        .create_event(pubkey, body)
         .await
         .map(Json)
         .map_err(|e| {
@@ -132,15 +136,18 @@ pub async fn get_event(
     responses(
         (status = OK, description = "Successfully add entry into oracle weather event", body = WeatherEntry),
         (status = BAD_REQUEST, description = "Invalid entry to be created"),
+        (status = FORBIDDEN, description = "Invalid signature from coordinator in nostr authorization header"),
+        (status = UNAUTHORIZED, description = "Invalid nostr authorization header nip-98 using coordinator keys"),
     ))]
 pub async fn add_event_entry(
+    NostrAuth { pubkey, .. }: NostrAuth,
     State(state): State<Arc<AppState>>,
     Path(_event_id): Path<Uuid>,
     Json(body): Json<AddEventEntry>,
 ) -> Result<Json<WeatherEntry>, ErrorResponse> {
     state
         .oracle
-        .add_event_entry(body)
+        .add_event_entry(pubkey, body)
         .await
         .map(Json)
         .map_err(|e| {

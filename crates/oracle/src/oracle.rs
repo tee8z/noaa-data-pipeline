@@ -1,20 +1,19 @@
 use crate::{
-    validate, weather_data, ActiveEvent, AddEventEntry, AddEventEntryMessage, CreateEvent,
-    CreateEventData, CreateEventMessage, Event, EventData, EventFilter, EventStatus, EventSummary,
-    Forecast, ForecastRequest, Observation, ObservationRequest, SignEvent, ValueOptions, Weather,
-    WeatherData, WeatherEntry,
+    weather_data, ActiveEvent, AddEventEntry, CreateEvent, CreateEventData, Event, EventData,
+    EventFilter, EventStatus, EventSummary, Forecast, ForecastRequest, Observation,
+    ObservationRequest, SignEvent, ValueOptions, Weather, WeatherData, WeatherEntry,
 };
 use anyhow::anyhow;
 use base64::{engine::general_purpose, Engine};
 use dlctix::{
     attestation_locking_point, attestation_secret,
-    bitcoin::key::Secp256k1,
-    musig2::secp256k1::{rand, PublicKey, SecretKey},
+    musig2::secp256k1::{rand, PublicKey, Secp256k1, SecretKey},
     secp::{MaybePoint, Point},
 };
 use log::{debug, error, info, warn};
-use nostr::{key::Keys, nips::nip19::ToBech32};
+use nostr_sdk::{key::Keys, nips::nip19::ToBech32, PublicKey as NostrPublicKey};
 use pem_rfc7468::{decode_vec, encode_string};
+use serde::Serialize;
 use std::{
     cmp,
     fs::{metadata, File},
@@ -27,34 +26,65 @@ use time::{Duration, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Error, Debug, ToSchema)]
+#[derive(Error, Debug, Serialize, ToSchema)]
 pub enum Error {
     #[error("{0}")]
     NotFound(String),
+    #[schema(value_type = String)]
     #[error("Failed to get key: {0}")]
-    ValidateKey(#[from] anyhow::Error),
+    ValidateKey(
+        #[serde(skip)]
+        #[from]
+        anyhow::Error,
+    ),
     #[error("Must have at least one outcome: {0}")]
     MinOutcome(String),
     #[error("Event maturity epoch must be in the future: {0}")]
     EventMaturity(String),
+    #[schema(value_type = String)]
     #[error("Failed to convert private key into nostr keys: {0}")]
-    ConvertKey(#[from] nostr::key::Error),
+    ConvertKey(
+        #[serde(skip)]
+        #[from]
+        nostr_sdk::key::Error,
+    ),
+    #[schema(value_type = String)]
     #[error("Failed to convert public key into nostr base32 format: {0}")]
-    Base32Key(#[from] nostr::nips::nip19::Error),
+    Base32Key(
+        #[serde(skip)]
+        #[from]
+        nostr_sdk::nips::nip19::Error,
+    ),
+    #[schema(value_type = String)]
     #[error("Failed to query datasource: {0}")]
-    DataQuery(#[from] duckdb::Error),
+    DataQuery(
+        #[serde(skip)]
+        #[from]
+        duckdb::Error,
+    ),
     #[error("Pubkeys in DB doesn't match with .pem")]
     MismatchPubkey(String),
     #[error("Invalid entry: {0}")]
     BadEntry(String),
     #[error("Invalid event: {0}")]
-    BadEvent(anyhow::Error),
+    #[schema(value_type = String)]
+    BadEvent(#[serde(skip)] anyhow::Error),
+    #[schema(value_type = String)]
     #[error("{0}")]
-    WeatherData(#[from] weather_data::Error),
+    WeatherData(
+        #[serde(skip)]
+        #[from]
+        weather_data::Error,
+    ),
     #[error("Failed to find winning outcome: {0}")]
     OutcomeNotFound(String),
+    #[schema(value_type = String)]
     #[error("Failed to validate message: {0}")]
-    Validation(#[from] serde_json::Error),
+    Validation(
+        #[serde(skip)]
+        #[from]
+        serde_json::Error,
+    ),
 }
 
 pub struct Oracle {
@@ -150,7 +180,11 @@ impl Oracle {
         }
     }
 
-    pub async fn create_event(&self, event: CreateEvent) -> Result<Event, Error> {
+    pub async fn create_event(
+        &self,
+        coordinator_pubkey: NostrPublicKey,
+        event: CreateEvent,
+    ) -> Result<Event, Error> {
         if event.id.get_version_num() != 7 {
             return Err(Error::BadEvent(anyhow!(
                 "event needs to provide a valid Uuidv7 for event id {}",
@@ -162,37 +196,30 @@ impl Oracle {
                 "Max number of allowed entries the oracle can watch is 25"
             )));
         }
-        if let Some(coordinator) = event.coordinator.clone() {
-            let message: CreateEventMessage = event.clone().into();
-            info!("create event: {:?}", message);
-            validate(
-                message.message()?,
-                &coordinator.pubkey,
-                &coordinator.signature,
-            )?;
+        if event.number_of_places_win > 5 {
+            return Err(Error::BadEvent(anyhow!(
+                "Max number of allowed ranks in an event that can win is 5, requested: {}",
+                event.number_of_places_win
+            )));
         }
-        let oracle_event =
-            CreateEventData::new(self.raw_public_key(), event).map_err(Error::BadEvent)?;
+        let oracle_event = CreateEventData::new(self.raw_public_key(), coordinator_pubkey, event)
+            .map_err(Error::BadEvent)?;
         self.event_data
             .add_event(oracle_event)
             .await
             .map_err(Error::DataQuery)
     }
 
-    pub async fn add_event_entry(&self, entry: AddEventEntry) -> Result<WeatherEntry, Error> {
+    pub async fn add_event_entry(
+        &self,
+        nostr_pubkey: NostrPublicKey,
+        entry: AddEventEntry,
+    ) -> Result<WeatherEntry, Error> {
         if entry.id.get_version_num() != 7 {
             return Err(Error::BadEntry(format!(
                 "Client needs to provide a valid Uuidv7 for entry id {}",
                 entry.id
             )));
-        }
-        if let Some(coordinator) = entry.coordinator.clone() {
-            let messages: AddEventEntryMessage = entry.clone().into();
-            validate(
-                messages.message()?,
-                &coordinator.pubkey,
-                &coordinator.signature,
-            )?;
         }
         let event = match self.event_data.get_event(&entry.event_id).await {
             Ok(event_data) => Ok(event_data),
@@ -203,6 +230,14 @@ impl Oracle {
             Err(e) => Err(Error::DataQuery(e)),
         }?;
         info!("event: {:?}", event);
+
+        let nostr_pubkey = nostr_pubkey.to_bech32()?;
+        if event.coordinator_pubkey != nostr_pubkey {
+            return Err(Error::BadEntry(format!(
+                "Client needs to the valid coordinator signature in header for this event {}",
+                entry.id
+            )));
+        }
         // NOTE: It's not the end of the world if we do go over the allowed number of entries,
         // worse case just means more people in the event, doesn't change our score mechanism
         if event.total_allowed_entries < event.entry_ids.len() as i64 {

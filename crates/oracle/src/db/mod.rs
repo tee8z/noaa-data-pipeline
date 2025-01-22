@@ -1,14 +1,12 @@
 use anyhow::anyhow;
-use dlctix::bitcoin::XOnlyPublicKey;
-use dlctix::musig2::secp256k1::schnorr::Signature;
-use dlctix::musig2::secp256k1::{Message, PublicKey};
+use dlctix::musig2::secp256k1::PublicKey;
 use dlctix::secp::{MaybeScalar, Scalar};
 use dlctix::{attestation_locking_point, EventLockingConditions};
 use duckdb::arrow::datatypes::ToByteSlice;
 use duckdb::types::{OrderedMap, ToSqlOutput, Type, Value};
 use duckdb::{ffi, ErrorCode, Row, ToSql};
 use log::{debug, info};
-use serde::de::Error;
+use nostr_sdk::{PublicKey as NostrPublicKey, ToBech32};
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
@@ -42,56 +40,8 @@ pub struct CreateEvent {
     pub number_of_values_per_entry: usize,
     /// Total number of allowed entries into the event
     pub total_allowed_entries: usize,
-    /// Add a coordinator that will use the event entries in a competition
-    pub coordinator: Option<CoordinatorInfo>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CreateEventMessage {
-    /// Client needs to provide a valid Uuidv7
-    pub id: Uuid,
-    #[serde(with = "time::serde::rfc3339")]
-    /// Time at which the attestation will be added to the event, needs to be after the observation date
-    pub signing_date: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
-    /// Date of when the weather observations occurred (midnight UTC), all entries must be made before this time
-    pub observation_date: OffsetDateTime,
-    /// NOAA observation stations used in this event
-    pub locations: Vec<String>,
-    /// The number of values that can be selected per entry in the event (default to number_of_locations * 3, (temp_low, temp_high, wind_speed))
-    pub number_of_values_per_entry: usize,
-    /// Total number of allowed entries into the event
-    pub total_allowed_entries: usize,
-}
-
-impl CreateEventMessage {
-    pub fn message(&self) -> Result<Message, serde_json::Error> {
-        let message_str = serde_json::to_string(self)?;
-        let message = Message::from_digest_slice(message_str.as_bytes())
-            .map_err(|e| serde_json::Error::custom(e.to_string()))?;
-        Ok(message)
-    }
-}
-
-impl From<CreateEvent> for CreateEventMessage {
-    fn from(value: CreateEvent) -> Self {
-        Self {
-            id: value.id,
-            signing_date: value.signing_date,
-            observation_date: value.observation_date,
-            locations: value.locations,
-            number_of_values_per_entry: value.number_of_values_per_entry,
-            total_allowed_entries: value.total_allowed_entries,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CoordinatorInfo {
-    /// The pubkey of the coordinator
-    pub pubkey: String,
-    /// The values of the payload signed by the coordinator
-    pub signature: String,
+    /// Total number of ranks can win (max 5 ranks)
+    pub number_of_places_win: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,18 +58,24 @@ pub struct CreateEventData {
     pub locations: Vec<String>,
     /// The number of values that can be selected per entry in the event (default to number_of_locations * 3, (temp_low, temp_high, wind_speed))
     pub number_of_values_per_entry: i64,
+    /// Total number of allowed entries into the event
     pub total_allowed_entries: i64,
+    /// Total number of ranks can win (max 5 ranks)
     pub number_of_places_win: i64,
     /// Used to sign the result of the event being watched
     pub nonce: Scalar,
     /// Used in constructing the dlctix transactions
     pub event_announcement: EventLockingConditions,
     /// The pubkey of the coordinator
-    pub coordinator_pubkey: Option<String>,
+    pub coordinator_pubkey: String,
 }
 
 impl CreateEventData {
-    pub fn new(oracle_pubkey: PublicKey, event: CreateEvent) -> Result<Self, anyhow::Error> {
+    pub fn new(
+        oracle_pubkey: PublicKey,
+        coordinator_pubkey: NostrPublicKey,
+        event: CreateEvent,
+    ) -> Result<Self, anyhow::Error> {
         if event.id.get_version_num() != 7 {
             return Err(anyhow!(
                 "Client needs to provide a valid Uuidv7 for event id {}",
@@ -133,9 +89,16 @@ impl CreateEventData {
                 event.observation_date.format(&Rfc3339).unwrap()
             ));
         }
-        let allowed_scored_ranks = 3;
-        let possible_user_outcomes: Vec<Vec<usize>> =
-            generate_ranking_permutations(event.total_allowed_entries, allowed_scored_ranks);
+        if event.number_of_places_win > 5 {
+            return Err(anyhow::anyhow!(
+                "Number of ranks can not be larger than 5, requested {}",
+                event.number_of_places_win
+            ));
+        }
+        let possible_user_outcomes: Vec<Vec<usize>> = generate_ranking_permutations(
+            event.total_allowed_entries,
+            event.number_of_places_win as usize,
+        );
         info!("user outcomes: {:?}", possible_user_outcomes);
 
         let outcome_messages: Vec<Vec<u8>> = generate_outcome_messages(possible_user_outcomes);
@@ -160,6 +123,10 @@ impl CreateEventData {
             locking_points,
         };
 
+        let coordinator_pubkey = coordinator_pubkey
+            .to_bech32()
+            .map_err(|e| anyhow!("failed to format cooridinator pubkey as bech32 {}", e))?;
+
         Ok(Self {
             id: event.id,
             observation_date: event.observation_date,
@@ -170,32 +137,9 @@ impl CreateEventData {
             number_of_values_per_entry: event.number_of_values_per_entry as i64,
             locations: event.clone().locations,
             event_announcement,
-            coordinator_pubkey: event
-                .coordinator
-                .map(|v| Some(v.pubkey))
-                .unwrap_or_default(),
+            coordinator_pubkey,
         })
     }
-}
-
-/// Validates the received messages was created by the provided pubkey
-pub fn validate(message: Message, pubkey_str: &str, signature: &str) -> Result<(), anyhow::Error> {
-    info!("pubkey: {} signature: {}", pubkey_str, signature);
-    let raw_signature: Vec<u8> = hex::decode(signature).unwrap();
-    let sig: Signature = Signature::from_slice(raw_signature.as_slice())
-        .map_err(|e| anyhow!("invalid signature: {}", e))?;
-    let raw_pubkey: Vec<u8> = hex::decode(pubkey_str).unwrap();
-    let pubkey: XOnlyPublicKey = XOnlyPublicKey::from_slice(raw_pubkey.as_slice())
-        .map_err(|e| anyhow!("invalid pubkey: {}", e))?;
-    sig.verify(&message, &pubkey).map_err(|e| {
-        anyhow!(
-            "invalid signature {} for pubkey {} {}",
-            signature,
-            pubkey,
-            e
-        )
-    })?;
-    Ok(())
 }
 
 impl From<CreateEventData> for Event {
@@ -215,6 +159,7 @@ impl From<CreateEventData> for Event {
             entries: vec![],
             weather: vec![],
             attestation: None,
+            coordinator_pubkey: value.coordinator_pubkey,
         }
     }
 }
@@ -243,10 +188,13 @@ pub struct SignEvent {
     #[serde(with = "time::serde::rfc3339")]
     pub observation_date: OffsetDateTime,
     pub status: EventStatus,
+    #[schema(value_type = String)]
     pub nonce: Scalar,
+    #[schema(value_type = String)]
     pub event_announcement: EventLockingConditions,
     pub number_of_places_win: i64,
     pub number_of_values_per_entry: i64,
+    #[schema(value_type = String)]
     pub attestation: Option<MaybeScalar>,
 }
 
@@ -334,6 +282,7 @@ pub struct ActiveEvent {
     pub total_entries: i64,
     pub number_of_values_per_entry: i64,
     pub number_of_places_win: i64,
+    #[schema(value_type = String)]
     pub attestation: Option<MaybeScalar>,
 }
 
@@ -482,8 +431,10 @@ pub struct EventSummary {
     /// The forecasted and observed values for each station on the event date
     pub weather: Vec<Weather>,
     /// When added it means the oracle has signed that the current data is the final result
+    #[schema(value_type = String)]
     pub attestation: Option<MaybeScalar>,
     /// Used to sign the result of the event being watched
+    #[schema(value_type = String)]
     pub nonce: Scalar,
 }
 
@@ -619,11 +570,16 @@ pub struct Event {
     /// The forecasted and observed values for each station on the event date
     pub weather: Vec<Weather>,
     /// Nonce the oracle committed to use as part of signing final results
+    #[schema(value_type = String)]
     pub nonce: Scalar,
     /// Holds the predefined outcomes the oracle will attest to at event complete
+    #[schema(value_type = String)]
     pub event_announcement: EventLockingConditions,
     /// When added it means the oracle has signed that the current data is the final result
+    #[schema(value_type = String)]
     pub attestation: Option<MaybeScalar>,
+    /// The pubkey of the coordinator
+    pub coordinator_pubkey: String,
 }
 
 impl Event {
@@ -722,6 +678,7 @@ impl<'a> TryFrom<&Row<'a>> for Event {
                     serde_json::from_slice(&blob)
                 })?
                 .map_err(|e| duckdb::Error::FromSqlConversionFailure(9, Type::Any, Box::new(e)))?,
+            coordinator_pubkey: row.get(10)?,
             status: EventStatus::default(),
             //These nested values have to be made by more quries
             entry_ids: vec![],
@@ -1265,35 +1222,6 @@ pub struct AddEventEntry {
     pub id: Uuid,
     pub event_id: Uuid,
     pub expected_observations: Vec<WeatherChoices>,
-    /// Add the coordinator information that pushed this event entry along
-    pub coordinator: Option<CoordinatorInfo>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct AddEventEntryMessage {
-    /// Client needs to provide a valid Uuidv7
-    pub id: Uuid,
-    pub event_id: Uuid,
-    pub expected_observations: Vec<WeatherChoices>,
-}
-
-impl AddEventEntryMessage {
-    pub fn message(&self) -> Result<Message, serde_json::Error> {
-        let message_str = serde_json::to_string(self)?;
-        let message = Message::from_digest_slice(message_str.as_bytes())
-            .map_err(|e| serde_json::Error::custom(e.to_string()))?;
-        Ok(message)
-    }
-}
-
-impl From<AddEventEntry> for AddEventEntryMessage {
-    fn from(value: AddEventEntry) -> Self {
-        AddEventEntryMessage {
-            id: value.id,
-            event_id: value.event_id,
-            expected_observations: value.expected_observations,
-        }
-    }
 }
 
 impl From<AddEventEntry> for WeatherEntry {

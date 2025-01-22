@@ -1,5 +1,5 @@
 use crate::{file_access, FileAccess, FileData, FileParams, ForecastRequest, ObservationRequest};
-use axum::async_trait;
+use async_trait::async_trait;
 use duckdb::{
     arrow::array::{Float64Array, Int64Array, RecordBatch, StringArray},
     params_from_iter, Connection,
@@ -9,6 +9,7 @@ use scooby::postgres::{select, with, Aliasable, Parameters, Select};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime};
+use utoipa::ToSchema;
 
 pub struct WeatherAccess {
     file_access: Arc<dyn FileData>,
@@ -273,7 +274,7 @@ impl Forecasts {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct Forecast {
     pub station_id: String,
     pub date: String,
@@ -362,7 +363,7 @@ impl Observations {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct Observation {
     pub station_id: String,
     pub start_time: String,
@@ -487,7 +488,7 @@ impl From<&RecordBatch> for Stations {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct Station {
     pub station_id: String,
     pub station_name: String,

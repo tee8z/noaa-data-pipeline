@@ -4,7 +4,7 @@ use crate::{
     ActiveEvent, Forecasted, Observed, SignEvent, ToRawSql, ValueOptions, Weather, WeatherChoices,
     WeatherChoicesWithEntry, WeatherEntry,
 };
-use dlctix::bitcoin::XOnlyPublicKey;
+use dlctix::musig2::secp256k1::XOnlyPublicKey;
 use duckdb::types::Value;
 use duckdb::{params, params_from_iter, AccessMode, Config, Connection};
 use log::{debug, info};
@@ -684,9 +684,8 @@ impl EventData {
             "total_allowed_entries",
             "number_of_places_win",
             "number_of_values_per_entry",
-            "attestation_signature",
-            "nonce",
         ))
+        .and_select(("attestation_signature", "nonce", "coordinator_pubkey"))
         .from("events")
         .where_("id = $1");
 

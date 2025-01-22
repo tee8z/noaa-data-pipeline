@@ -112,8 +112,8 @@ pub fn app(app_state: AppState) -> Router {
         .allow_origin(Any);
     Router::new()
         .route("/files", get(files))
-        .route("/file/:file_name", get(download))
-        .route("/file/:file_name", post(upload))
+        .route("/file/{file_name}", get(download))
+        .route("/file/{file_name}", post(upload))
         .route("/stations", get(get_stations))
         .route("/stations/forecasts", get(forecasts))
         .route("/stations/observations", get(observations))
@@ -122,10 +122,10 @@ pub fn app(app_state: AppState) -> Router {
         .route("/oracle/update", post(update_data))
         .route("/oracle/events", get(list_events))
         .route("/oracle/events", post(create_event))
-        .route("/oracle/events/:event_id", get(get_event))
-        .route("/oracle/events/:event_id/entry", post(add_event_entry))
+        .route("/oracle/events/{event_id}", get(get_event))
+        .route("/oracle/events/{event_id}/entry", post(add_event_entry))
         .route(
-            "/oracle/events/:event_id/entry/:entry_id",
+            "/oracle/events/{event_id}/entry/{entry_id}",
             get(get_event_entry),
         )
         .layer(middleware::from_fn(log_request))

@@ -1,10 +1,15 @@
-use crate::helpers::{spawn_app, MockWeatherAccess};
+use crate::helpers::{create_auth_event, spawn_app, MockWeatherAccess};
 use axum::{
     body::{to_bytes, Body},
     http::Request,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use hyper::{header, Method};
 use log::info;
+use nostr_sdk::{
+    hashes::{sha256::Hash as Sha256Hash, Hash},
+    Keys,
+};
 use oracle::{AddEventEntry, CreateEvent, WeatherChoices, WeatherEntry};
 use serde_json::{from_slice, to_string};
 use std::sync::Arc;
@@ -15,9 +20,10 @@ use uuid::Uuid;
 #[tokio::test]
 async fn can_create_entry_into_event() {
     let test_app = spawn_app(Arc::new(MockWeatherAccess::new())).await;
-
+    let keys = Keys::generate();
+    let oracle_event_id = Uuid::now_v7();
     let new_event = CreateEvent {
-        id: Uuid::now_v7(),
+        id: oracle_event_id,
         observation_date: OffsetDateTime::now_utc(),
         signing_date: OffsetDateTime::now_utc(),
         locations: vec![
@@ -28,12 +34,12 @@ async fn can_create_entry_into_event() {
         ],
         total_allowed_entries: 5,
         number_of_values_per_entry: 6,
-        coordinator: None,
+        number_of_places_win: 1,
     };
-    let oracle_event = test_app.oracle.create_event(new_event).await.unwrap();
+
     let new_entry = AddEventEntry {
         id: Uuid::now_v7(),
-        event_id: oracle_event.id,
+        event_id: oracle_event_id,
         expected_observations: vec![
             WeatherChoices {
                 stations: String::from("PFNO"),
@@ -54,13 +60,36 @@ async fn can_create_entry_into_event() {
                 wind_speed: None,
             },
         ],
-        coordinator: None,
     };
     let body_json = to_string(&new_entry).unwrap();
+    let payload_hash = Sha256Hash::hash(body_json.as_bytes());
+
+    let oracle_event = test_app
+        .oracle
+        .create_event(keys.public_key, new_event)
+        .await
+        .unwrap();
+
+    let base_url = "http://localhost:3000";
+    let path = format!("/oracle/events/{}/entry", oracle_event.id);
+    let event = create_auth_event(
+        "POST",
+        &format!("{}{}", base_url, path),
+        Some(payload_hash),
+        &keys,
+    )
+    .await;
+
+    let auth_header = format!(
+        "Nostr {}",
+        BASE64.encode(serde_json::to_string(&event).unwrap())
+    );
     let request = Request::builder()
         .method(Method::POST)
-        .uri(format!("/oracle/events/{}/entry", oracle_event.id))
+        .uri(path)
         .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, auth_header)
+        .header("host", "localhost:3000")
         .body(Body::from(body_json))
         .unwrap();
 
@@ -81,7 +110,7 @@ async fn can_create_entry_into_event() {
 #[tokio::test]
 async fn can_create_and_get_event_entry() {
     let test_app = spawn_app(Arc::new(MockWeatherAccess::new())).await;
-
+    let keys = Keys::generate();
     let new_event = CreateEvent {
         id: Uuid::now_v7(),
         observation_date: OffsetDateTime::now_utc(),
@@ -93,13 +122,12 @@ async fn can_create_and_get_event_entry() {
             String::from("KWMC"),
         ],
         total_allowed_entries: 10,
+        number_of_places_win: 1,
         number_of_values_per_entry: 6,
-        coordinator: None,
     };
-    let oracle_event = test_app.oracle.create_event(new_event).await.unwrap();
     let new_entry = AddEventEntry {
         id: Uuid::now_v7(),
-        event_id: oracle_event.id,
+        event_id: new_event.id,
         expected_observations: vec![
             WeatherChoices {
                 stations: String::from("PFNO"),
@@ -120,13 +148,34 @@ async fn can_create_and_get_event_entry() {
                 wind_speed: None,
             },
         ],
-        coordinator: None,
     };
     let body_json = to_string(&new_entry).unwrap();
+    let payload_hash = Sha256Hash::hash(body_json.as_bytes());
+    let base_url = "http://localhost:3000";
+    let path = format!("/oracle/events/{}/entry", new_event.id);
+    let event = create_auth_event(
+        "POST",
+        &format!("{}{}", base_url, path),
+        Some(payload_hash),
+        &keys,
+    )
+    .await;
+    let auth_header = format!(
+        "Nostr {}",
+        BASE64.encode(serde_json::to_string(&event).unwrap())
+    );
+    let oracle_event = test_app
+        .oracle
+        .create_event(event.pubkey, new_event)
+        .await
+        .unwrap();
+
     let request = Request::builder()
         .method(Method::POST)
-        .uri(format!("/oracle/events/{}/entry", oracle_event.id))
+        .uri(path)
         .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, auth_header)
+        .header("host", "localhost:3000")
         .body(Body::from(body_json))
         .unwrap();
 

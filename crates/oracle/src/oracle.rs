@@ -246,13 +246,27 @@ impl Oracle {
                 event.id
             )));
         }
-        let num_choose_vals = entry.expected_observations.len() as i64;
-        if num_choose_vals > event.number_of_values_per_entry {
-            return Err(Error::BadEntry(format!(
-                "entry_id {0} not valid, choose too many values, max allowed {1} choose {2}",
-                entry.id, event.number_of_values_per_entry, num_choose_vals
-            )));
+
+        let mut choice_count = 0;
+        for weather_choice in &entry.expected_observations {
+            if weather_choice.temp_high.is_some() {
+                choice_count += 1;
+            }
+            if weather_choice.temp_low.is_some() {
+                choice_count += 1;
+            }
+            if weather_choice.wind_speed.is_some() {
+                choice_count += 1;
+            }
+
+            if choice_count > event.number_of_values_per_entry {
+                return Err(Error::BadEntry(format!(
+                    "entry_id {0} not valid, too many value choices, max allowed {1} but got {2}",
+                    entry.id, event.number_of_values_per_entry, choice_count
+                )));
+            }
         }
+
         let locations_choose: Vec<String> = entry
             .expected_observations
             .clone()
